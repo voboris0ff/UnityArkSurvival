@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "a6api/deepseek-v4-flash",
+  "provider": {
+    "a6api": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "A6API",
+      "options": {
+        "baseURL": "https://api.a6api.vip/v1",
+        "apiKey": "sk-ooogP3LniUysjVy4fOJxwqs9NbOvkPVDIYXitIVQBBt3QtGc"
+      },
+      "models": {
+        "deepseek-v4.1-flash-1017": { "name": "deepseek-v4.1-flash-1017" }
+      }
+    }
+  }
+}
