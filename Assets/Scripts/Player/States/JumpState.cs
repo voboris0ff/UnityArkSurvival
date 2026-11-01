@@ -8,7 +8,10 @@ namespace ArkSurvival.Player.States
 
         public override void Enter()
         {
-            Context.Motor.TryJump();
+            if (Context.Motor.TryJump())
+            {
+                Context.ConsumeJumpBuffer();
+            }
         }
 
         public override void Tick(float deltaTime)

@@ -22,15 +22,5 @@ namespace ArkSurvival.Player.States
 
             MoveAir(deltaTime);
         }
-
-        private PlayerState ResolveGroundedState()
-        {
-            if (!Context.HasMove)
-            {
-                return Machine.Idle;
-            }
-
-            return Context.Input.SprintHeld ? Machine.Sprint : Machine.Walk;
-        }
     }
 }

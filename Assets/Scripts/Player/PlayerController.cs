@@ -1,3 +1,4 @@
+using ArkSurvival.Data;
 using UnityEngine;
 
 namespace ArkSurvival.Player
@@ -6,11 +7,14 @@ namespace ArkSurvival.Player
     {
         [SerializeField] private PlayerInputReader _input;
         [SerializeField] private CharacterMotor _motor;
+        [SerializeField] private PlayerStaminaConfig _staminaConfig;
         [SerializeField] private PlayerCamera _camera;
+        [SerializeField] private PlayerAnimator _animator;
         [SerializeField] private bool _lockCursor = true;
         [SerializeField] private float _logInterval = 0.5f;
 
         private PlayerStateMachine _stateMachine;
+        private PlayerContext _context;
         private float _nextLogTime;
 
         public PlayerStateMachine StateMachine => _stateMachine;
@@ -27,6 +31,11 @@ namespace ArkSurvival.Player
                 _motor = GetComponent<CharacterMotor>();
             }
 
+            if (_animator == null)
+            {
+                _animator = GetComponent<PlayerAnimator>();
+            }
+
             if (_lockCursor)
             {
                 Cursor.lockState = CursorLockMode.Locked;
@@ -41,8 +50,13 @@ namespace ArkSurvival.Player
                 return;
             }
 
-            PlayerContext context = new PlayerContext(_input, _motor, _motor.Config, _camera, transform);
-            _stateMachine = new PlayerStateMachine(context);
+            if (_staminaConfig == null)
+            {
+                Debug.LogWarning("PlayerController: PlayerStaminaConfig не назначен — спринт и ролл будут недоступны.", this);
+            }
+
+            _context = new PlayerContext(_input, _motor, _motor.Config, _staminaConfig, _camera, transform);
+            _stateMachine = new PlayerStateMachine(_context);
             _stateMachine.Start();
         }
 
@@ -54,9 +68,22 @@ namespace ArkSurvival.Player
             }
 
             float deltaTime = Time.deltaTime;
+            _context.Stamina.Tick(deltaTime);
+            _context.Tick(deltaTime);
+            if (_input.JumpPressed)
+            {
+                _context.BufferJump();
+            }
+
             _motor.SetJumpHeld(_input.JumpHeld);
             _motor.Tick(deltaTime);
             _stateMachine.Tick(deltaTime);
+
+            if (_animator != null)
+            {
+                _animator.Tick(_context, _stateMachine);
+            }
+
             LogState();
         }
 
@@ -67,7 +94,12 @@ namespace ArkSurvival.Player
                 return;
             }
 
-            bool active = _input.Move.sqrMagnitude > 0.01f || _input.SprintHeld || !_motor.IsGrounded;
+            bool active = _input.Move.sqrMagnitude > 0.01f
+                || _input.SprintHeld
+                || !_motor.IsGrounded
+                || _context.IsInvulnerable
+                || !_context.CanRoll
+                || _context.Stamina.IsExhausted;
             if (!active)
             {
                 return;
@@ -75,7 +107,7 @@ namespace ArkSurvival.Player
 
             _nextLogTime = Time.unscaledTime + _logInterval;
             Debug.Log(
-                $"State={_stateMachine.CurrentName} Grounded={_motor.IsGrounded} Coyote={_motor.CoyoteActive} V={_motor.VerticalVelocity:F2} H={_motor.HorizontalSpeed:F2}",
+                $"State={_stateMachine.CurrentName} Grounded={_motor.IsGrounded} Coyote={_motor.CoyoteActive} V={_motor.VerticalVelocity:F2} H={_motor.HorizontalSpeed:F2} Inv={_context.IsInvulnerable} RollCD={_context.RollCooldownRemaining:F2} Buf={_context.JumpBufferRemaining:F2} St={_context.Stamina.Current:F1}/{_context.Stamina.Max:F0} Exh={_context.Stamina.IsExhausted}",
                 this);
         }
     }

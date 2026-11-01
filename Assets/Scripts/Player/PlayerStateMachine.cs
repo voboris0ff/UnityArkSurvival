@@ -11,6 +11,7 @@ namespace ArkSurvival.Player
         public SprintState Sprint { get; }
         public JumpState Jump { get; }
         public FallState Fall { get; }
+        public RollState Roll { get; }
 
         public PlayerState Current => _current;
         public string CurrentName => _current != null ? _current.GetType().Name : string.Empty;
@@ -22,6 +23,7 @@ namespace ArkSurvival.Player
             Sprint = new SprintState(context, this);
             Jump = new JumpState(context, this);
             Fall = new FallState(context, this);
+            Roll = new RollState(context, this);
         }
 
         public void Start()

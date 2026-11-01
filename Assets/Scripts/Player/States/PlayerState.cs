@@ -33,9 +33,35 @@ namespace ArkSurvival.Player.States
             Context.Motor.Move(Vector3.zero, 0f, deltaTime);
         }
 
+        protected bool TryStartRoll()
+        {
+            if (!Context.Input.RollPressed
+                || !Context.CanRoll
+                || !Context.Motor.IsGrounded
+                || !Context.Stamina.CanSpendRoll)
+            {
+                return false;
+            }
+
+            Machine.ChangeState(Machine.Roll);
+            return true;
+        }
+
+        protected PlayerState ResolveGroundedState()
+        {
+            if (!Context.HasMove)
+            {
+                return Machine.Idle;
+            }
+
+            return Context.Input.SprintHeld && Context.Stamina.CanStartSprint
+                ? Machine.Sprint
+                : Machine.Walk;
+        }
+
         protected bool TryLeaveGround()
         {
-            if (Context.Input.JumpPressed && Context.Motor.CanJump)
+            if ((Context.Input.JumpPressed || Context.HasJumpBuffered) && Context.Motor.CanJump)
             {
                 Machine.ChangeState(Machine.Jump);
                 return true;

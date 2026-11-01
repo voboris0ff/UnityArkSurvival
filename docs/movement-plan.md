@@ -84,25 +84,25 @@ Roll → Idle/Walk/Sprint       (конец rollDuration; в воздухе за
 - **Критерий готовности:** прыжок из grounded-состояний; `Jump → Fall` при `VerticalVelocity ≤ 0`; `Fall → Idle/Walk/Sprint` при приземлении; coyote-прыжок после схода с края; двойной прыжок невозможен; из воздуха нельзя.
 - **Ручные шаги в Unity:** настроить `jumpHeight`, `gravity`, `fallGravityMultiplier`, `lowJumpGravityMultiplier`, `maxFallSpeed`, `airControl` в SO.
 
-### [ ] Этап 5. Roll (кувырок)
+### [x] Этап 5. Roll (кувырок)
 
 - **Файлы:** `Player/States/RollState.cs`, таймер кулдауна в контексте контроллера, поля ролла в `PlayerMovementConfig`.
 - **Критерий готовности:** ролл из `Idle/Walk/Sprint` при `RollPressed` и `CanRoll`; направление camera-relative и фиксируется на входе; скорость по кривой; кулдаун; запрет в воздухе; `IsInvulnerable` в окне i-frames; после `rollDuration` — в Idle/Walk/Sprint.
 - **Ручные шаги в Unity:** назначить `Roll` action; настроить `rollDuration`, `rollCooldown`, `rollSpeedCurve`, `iFramesStart/End` в SO.
 
-### [ ] Этап 6 (опционально). Jump buffer
+### [x] Этап 6 (опционально). Jump buffer
 
 - **Файлы:** `Player/PlayerController.cs` (таймер буфера в контексте), `IdleState/WalkState/SprintState` (потребление), поле в `PlayerMovementConfig`.
 - **Критерий готовности:** нажатие за `jumpBufferTime` до приземления выполняется сразу после касания земли; буфер не копится и сбрасывается при использовании.
 - **Ручные шаги в Unity:** выставить `jumpBufferTime` в SO (0.1–0.15 с).
 
-### [ ] Этап 7. Стамина (спринт + ролл)
+### [x] Этап 7. Стамина (спринт + ролл)
 
 - **Файлы:** `Player/PlayerStamina.cs`, `Data/PlayerStaminaConfig.cs`; правки `PlayerContext.cs` (ссылка на стамину), `PlayerController.cs` (тик и передача в контекст), `SprintState.cs` (расход и блокировка), `RollState.cs` (списание стоимости).
 - **Критерий готовности:** спринт расходует стамину; при нуле — переход в `Walk` и запрет спринта до восстановления до порога; ролл не начинается при нехватке стамины; регенерация стартует через `regenDelay`; событие изменения стамины пригодно для HUD; расход и регенерация не зависят от FPS.
 - **Ручные шаги в Unity:** создать ассет `PlayerStaminaConfig`, назначить в `PlayerController`, выставить максимум, расход, регенерацию, задержку, стоимость ролла и пороги.
 
-### [ ] Этап 8. Анимации
+### [x] Этап 8. Анимации
 
 - **Файлы:** `Player/PlayerAnimator.cs`; правка `PlayerController.cs` (передача состояния после `FSM.Tick`).
 - **Критерий готовности:** анимация соответствует FSM: Idle/Walk/Run по `Speed`, Jump/Fall по `Grounded` и `VerticalSpeed`, Roll по триггеру; root motion выключен, движение остаётся за кодом; нет «залипаний» и рассинхрона с физикой.
@@ -114,7 +114,7 @@ Roll → Idle/Walk/Sprint       (конец rollDuration; в воздухе за
 
 ## Решения и заметки
 
-- Этапы 1–4 проверены в редакторе. Этап 4 после первой проверки доработан: добавлена асимметричная гравитация и переменная высота прыжка. Следующий — этап 5 (Roll).
+- Этапы 1–8 реализованы. Этап 4 после первой проверки доработан: добавлена асимметричная гравитация и переменная высота прыжка. Этапы 5–8 в редакторе ещё не проверены. План движения закрыт; дальше — ручная сборка Animator Controller и тюнинг.
 - Камера: мышь, свободная орбита от третьего лица без авто-центрирования (Souls-like).
 - Чувствительность камеры — в градусах на пиксель: 0.15 по горизонтали, 0.10 по вертикали.
 - Сглаживание поворота по умолчанию выключено (`_rotationSmoothing = 0`) ради «сырого» отклика мыши.
@@ -127,3 +127,35 @@ Roll → Idle/Walk/Sprint       (конец rollDuration; в воздухе за
 - Root motion и Animator не используются, движение полностью кодом.
 - Анимации — только визуализация FSM через `PlayerAnimator`, параметры не влияют на физику.
 - Jump buffer — опциональный этап 6.
+- Этап 5, отклонения от плана:
+  - В `PlayerMovementConfig` добавлено поле `_rollSpeed` (базовая скорость ролла, по умолчанию 8). В списке параметров его не было, а `rollSpeedCurve` трактуется как множитель (значение × `RollSpeed`), иначе значения кривой 0.2–1 нельзя использовать как м/с.
+  - Кулдаун живёт в `PlayerContext`: `RollCooldownRemaining`, `CanRoll`, `Tick(dt)`, `StartRollCooldown()`. Тикается в `PlayerController.Update` первым, до `Motor.Tick` и FSM. Кулдаун стартует в `RollState.Enter` от `rollCooldown` и включает время самого ролла.
+  - `PlayerContext.IsInvulnerable` — публичный сеттер-хук для будущего урона; его выставляет только `RollState` (по `_elapsed` в окне `IFramesStart..IFramesEnd`), сбрасывается в `Exit`.
+  - В `CharacterMotor` добавлены `FaceDirection(dir)` (мгновенный доворот по плоскому направлению) и `MoveInstant(dir, speed, dt)` (сразу ставит `_currentSpeed`, минуя accel/decel). Обычный `Move` с ускорением для ролла не подходит.
+  - В `PlayerContext` добавлено `CameraForward`, общий приватный `YawRotation` используется и в `MoveDirection` — ролл без ввода катится по forward камеры, а не по forward персонажа.
+  - `RollState` при потере земли посреди ролла прерывается в `Fall`; проверка старта ролла — `IsGrounded` (не `CanJump`), поэтому из coyote-окна ролл недоступен.
+  - `TryStartRoll()` в базовом `PlayerState` вызывается в `Idle/Walk/Sprint` до `TryLeaveGround`, то есть ролл приоритетнее прыжка в один кадр.
+  - Проверка стамины для ролла (`Stamina.CanSpendRoll`) отложена до этапа 7; сейчас ограничение только кулдаун.
+- Этап 6, отклонения от плана:
+  - `PlayerMovementConfig._jumpBufferTime` (`JumpBufferTime`, по умолчанию 0.12 с) добавлено в блок `Jump & Gravity`.
+  - Буфер живёт в `PlayerContext`: `JumpBufferRemaining`, `HasJumpBuffered`, `BufferJump()`, `ConsumeJumpBuffer()`; декремент — в `PlayerContext.Tick`.
+  - `PlayerController` сначала тикает контекст, затем при `JumpPressed` вызывает `BufferJump()` — таймер не теряет кадр; порядок до `Motor.Tick` и FSM сохранён.
+  - `PlayerState.TryLeaveGround` срабатывает по `JumpPressed || HasJumpBuffered`; сброс буфера — в `JumpState.Enter` после успешного `Motor.TryJump` (а не в состоянии-потребителе), поэтому буфер гасится ровно в момент прыжка и не «съедается» при неудаче.
+  - Каждое новое нажатие перезаписывает таймер (не суммируется). Спринт/ролл приоритетнее прыжка в один кадр: ролл проверяется раньше, нажатие прыжка во время ролла сработает сразу после его окончания.
+  - На приземлении прыжок выполняется на первом `Tick` grounded-состояния (задержка ~1 кадр), поскольку буфер потребляют именно grounded-состояния, а `FallState` только переключает состояние.
+- Этап 7, отклонения от плана:
+  - `PlayerStamina` — обычный класс (не MonoBehaviour), создаётся внутри `PlayerContext` из `PlayerStaminaConfig`. API: `Current/Max/Normalized`, `IsExhausted`, `CanStartSprint`, `CanContinueSprint`, `CanSpendRoll`, `Tick(dt)`, `DrainSprint(dt)`, `TrySpendRoll()`; событие `Changed(current, max)` для будущего HUD (поднимается только при реальном изменении значения).
+  - Конструктор `PlayerContext` получил четвёртым параметром `PlayerStaminaConfig`; `PlayerContext.Stamina` — единая точка доступа. Это меняет сигнатуру, единственный вызов — в `PlayerController`.
+  - `PlayerController` получил `[SerializeField] private PlayerStaminaConfig _staminaConfig`; если ассет не назначен — предупреждение в консоль, спринт и ролл выключаются (а не падение). Порядок кадра: `Stamina.Tick → Context.Tick(кулдаун/буфер) → Motor.Tick → FSM.Tick`.
+  - Логика блокировки спринта вынесена в новые члены: `PlayerStamina.CanStartSprint` (не exhausted и `current >= sprintMinStamina`) и `CanContinueSprint` (не exhausted и `current > 0`). Поэтому спринт не обрывается при падении ниже `sprintMinStamina`, а только на нуле; повторный старт требует порога.
+  - `_exhausted` ставится при любом обнулении стамины (спринт или ролл), снимается только когда регенерация доходит до `exhaustedRecoveryThreshold`. Регенерация начинается после `regenDelay` с момента последней траты; таймер задержки перезапускается и при спринте, и при ролле.
+  - Вместо правки только `SprintState` добавлен общий `PlayerState.ResolveGroundedState()`, который учитывает стамину; его используют `IdleState`, `WalkState`, `FallState` и `RollState` (приватные дубли `ResolveGroundedState` в `FallState`/`RollState` удалены). `WalkState` проверяет `CanStartSprint` перед переходом в спринт.
+  - `TryStartRoll` теперь требует ещё и `Stamina.CanSpendRoll`; `RollState.Enter` списывает `rollCost` через `TrySpendRoll()`.
+  - Отладочный лог дополнен `St=current/max` и `Exh`, состояние исчерпания тоже включает логирование.
+- Этап 8, отклонения от плана:
+  - `PlayerAnimator.Tick(PlayerContext, PlayerStateMachine)` — единственный публичный метод; вызывается `PlayerController` сразу после `FSM.Tick`. Ссылка на компонент берётся из `[SerializeField] _animator` в контроллере или через `GetComponent` в `Awake`; при отсутствии аниматора вызов пропускается.
+  - `Speed` публикуется как фактическая горизонтальная скорость `CharacterMotor.HorizontalSpeed` (velocity `CharacterController`), а не как целевая скорость состояния — так blend tree совпадает с физикой при ускорении/замедлении.
+  - `Sprinting` = текущее состояние `SprintState` (ссылка на состояние), `Grounded`/`VerticalSpeed` — из мотора.
+  - `Roll` — триггер по фронту входа в `RollState` (флаг `_wasRolling`), поэтому срабатывает один раз за ролл. Обратного параметра нет: возврат из клипа ролла — по `Has Exit Time` в Animator.
+  - `PlayerAnimator.Awake` сам ищет `Animator` в дочерних объектах и принудительно ставит `applyRootMotion = false`; хэши параметров закэшированы через `Animator.StringToHash`.
+  - В `PlayerController` добавлено поле `[SerializeField] private PlayerAnimator _animator`.

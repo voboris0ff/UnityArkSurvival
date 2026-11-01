@@ -81,6 +81,21 @@ namespace ArkSurvival.Player
             _controller.Move(motion * deltaTime);
         }
 
+        public void FaceDirection(Vector3 direction)
+        {
+            Vector3 flat = new Vector3(direction.x, 0f, direction.z);
+            if (flat.sqrMagnitude > 0.0001f)
+            {
+                transform.rotation = Quaternion.LookRotation(flat.normalized, Vector3.up);
+            }
+        }
+
+        public void MoveInstant(Vector3 direction, float speed, float deltaTime)
+        {
+            _currentSpeed = speed;
+            Move(direction, speed, deltaTime);
+        }
+
         public bool TryJump()
         {
             if (!CanJump || _config == null || _controller == null)

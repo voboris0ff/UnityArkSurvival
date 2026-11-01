@@ -8,6 +8,11 @@ namespace ArkSurvival.Player.States
 
         public override void Tick(float deltaTime)
         {
+            if (TryStartRoll())
+            {
+                return;
+            }
+
             if (TryLeaveGround())
             {
                 return;
@@ -19,7 +24,7 @@ namespace ArkSurvival.Player.States
                 return;
             }
 
-            Machine.ChangeState(Context.Input.SprintHeld ? Machine.Sprint : Machine.Walk);
+            Machine.ChangeState(ResolveGroundedState());
         }
     }
 }

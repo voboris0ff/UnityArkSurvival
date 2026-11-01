@@ -12,16 +12,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ea50996b0039fdf40aed5b2f104e7064, type: 3}
   m_Name: PlayerMovementConfig
   m_EditorClassIdentifier: 
-  _walkSpeed: 4.5
-  _sprintSpeed: 7
+  _walkSpeed: 7
+  _sprintSpeed: 12
   _acceleration: 30
   _deceleration: 35
   _rotationSpeed: 15
-  _jumpHeight: 1.6
+  _jumpHeight: 3
   _gravity: 25
+  _fallGravityMultiplier: 1.5
+  _lowJumpGravityMultiplier: 2.2
   _maxFallSpeed: 50
   _airControl: 0.5
   _coyoteTime: 0.15
+  _jumpBufferTime: 0.12
   _rollSpeedCurve:
     serializedVersion: 2
     m_Curve:
@@ -29,7 +32,7 @@ MonoBehaviour:
       time: 0
       value: 1
       inSlope: 0
-      outSlope: -0.8
+      outSlope: 0
       tangentMode: 0
       weightedMode: 0
       inWeight: 0
@@ -37,21 +40,22 @@ MonoBehaviour:
     - serializedVersion: 3
       time: 1
       value: 0.2
-      inSlope: -0.8
-      outSlope: 0
+      inSlope: -0.1128014
+      outSlope: -0.1128014
       tangentMode: 0
       weightedMode: 0
-      inWeight: 0
+      inWeight: 0.42555907
       outWeight: 0
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  _rollDuration: 0.45
+  _rollSpeed: 20
+  _rollDuration: 0.6
   _rollCooldown: 0.6
   _iFramesStart: 0.05
   _iFramesEnd: 0.35
   _groundLayerMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 55
   _groundCheckRadius: 0.3
   _groundCheckOffset: 0.1

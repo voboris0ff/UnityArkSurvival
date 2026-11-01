@@ -8,6 +8,11 @@ namespace ArkSurvival.Player.States
 
         public override void Tick(float deltaTime)
         {
+            if (TryStartRoll())
+            {
+                return;
+            }
+
             if (TryLeaveGround())
             {
                 return;
@@ -19,7 +24,14 @@ namespace ArkSurvival.Player.States
                 return;
             }
 
-            if (!Context.Input.SprintHeld)
+            if (!Context.Input.SprintHeld || !Context.Stamina.CanContinueSprint)
+            {
+                Machine.ChangeState(Machine.Walk);
+                return;
+            }
+
+            Context.Stamina.DrainSprint(deltaTime);
+            if (!Context.Stamina.CanContinueSprint)
             {
                 Machine.ChangeState(Machine.Walk);
                 return;

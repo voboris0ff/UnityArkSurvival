@@ -20,9 +20,11 @@ namespace ArkSurvival.Data
         [SerializeField] private float _maxFallSpeed = 50f;
         [SerializeField] private float _airControl = 0.5f;
         [SerializeField] private float _coyoteTime = 0.15f;
+        [SerializeField] private float _jumpBufferTime = 0.12f;
 
         [Header("Roll")]
         [SerializeField] private AnimationCurve _rollSpeedCurve = AnimationCurve.Linear(0f, 1f, 1f, 0.2f);
+        [SerializeField] private float _rollSpeed = 8f;
         [SerializeField] private float _rollDuration = 0.45f;
         [SerializeField] private float _rollCooldown = 0.6f;
         [SerializeField] private float _iFramesStart = 0.05f;
@@ -45,7 +47,9 @@ namespace ArkSurvival.Data
         public float MaxFallSpeed => _maxFallSpeed;
         public float AirControl => _airControl;
         public float CoyoteTime => _coyoteTime;
+        public float JumpBufferTime => _jumpBufferTime;
         public AnimationCurve RollSpeedCurve => _rollSpeedCurve;
+        public float RollSpeed => _rollSpeed;
         public float RollDuration => _rollDuration;
         public float RollCooldown => _rollCooldown;
         public float IFramesStart => _iFramesStart;
