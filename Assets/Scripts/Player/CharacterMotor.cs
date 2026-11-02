@@ -11,6 +11,7 @@ namespace ArkSurvival.Player
         private float _verticalVelocity;
         private float _coyoteTimer;
         private float _currentSpeed;
+        private Vector3 _moveDirection = Vector3.forward;
         private bool _isGrounded;
         private bool _jumpHeld;
 
@@ -68,7 +69,8 @@ namespace ArkSurvival.Player
             Vector3 flat = new Vector3(direction.x, 0f, direction.z);
             if (flat.sqrMagnitude > 0.0001f)
             {
-                Quaternion targetRotation = Quaternion.LookRotation(flat.normalized, Vector3.up);
+                _moveDirection = flat.normalized;
+                Quaternion targetRotation = Quaternion.LookRotation(_moveDirection, Vector3.up);
                 float blend = 1f - Mathf.Exp(-_config.RotationSpeed * deltaTime);
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, blend);
             }
@@ -77,8 +79,10 @@ namespace ArkSurvival.Player
                 * Mathf.Max(0f, accelerationScale);
             _currentSpeed = Mathf.MoveTowards(_currentSpeed, speed, rate * deltaTime);
 
-            Vector3 motion = direction * _currentSpeed + Vector3.up * _verticalVelocity;
-            _controller.Move(motion * deltaTime);
+            Vector3 motion = _moveDirection * _currentSpeed + Vector3.up * _verticalVelocity;
+            CollisionFlags flags = _controller.Move(motion * deltaTime);
+
+            UpdateGroundState(0f, (flags & CollisionFlags.Below) != 0);
         }
 
         public void FaceDirection(Vector3 direction)
@@ -109,9 +113,10 @@ namespace ArkSurvival.Player
             return true;
         }
 
-        private void UpdateGroundState(float deltaTime)
+        private void UpdateGroundState(float deltaTime, bool touchedGroundBelow = false)
         {
-            bool grounded = _verticalVelocity <= 0.1f && (_controller.isGrounded || CheckGround());
+            bool grounded = _verticalVelocity <= 0.1f
+                && (touchedGroundBelow || _controller.isGrounded || CheckGround());
 
             if (grounded)
             {

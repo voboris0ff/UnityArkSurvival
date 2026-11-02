@@ -21,6 +21,11 @@ namespace ArkSurvival.Player.States
             }
 
             MoveAir(deltaTime);
+
+            if (Context.Motor.IsGrounded)
+            {
+                Machine.ChangeState(ResolveGroundedState());
+            }
         }
     }
 }

@@ -36,9 +36,11 @@ namespace ArkSurvival.Player
 
             bool rolling = machine.Current == machine.Roll;
 
+            float verticalSpeed = context.Motor.IsGrounded ? 0f : context.Motor.VerticalVelocity;
+
             _animator.SetFloat(SpeedHash, context.Motor.HorizontalSpeed);
             _animator.SetBool(GroundedHash, context.Motor.IsGrounded);
-            _animator.SetFloat(VerticalSpeedHash, context.Motor.VerticalVelocity);
+            _animator.SetFloat(VerticalSpeedHash, verticalSpeed);
             _animator.SetBool(SprintingHash, machine.Current == machine.Sprint);
 
             if (rolling && !_wasRolling)

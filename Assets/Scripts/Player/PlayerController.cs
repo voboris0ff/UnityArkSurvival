@@ -1,5 +1,6 @@
 using ArkSurvival.Data;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace ArkSurvival.Player
 {
@@ -38,8 +39,7 @@ namespace ArkSurvival.Player
 
             if (_lockCursor)
             {
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
+                ApplyCursorLock();
             }
         }
 
@@ -62,6 +62,8 @@ namespace ArkSurvival.Player
 
         private void Update()
         {
+            UpdateCursorLock();
+
             if (_stateMachine == null)
             {
                 return;
@@ -85,6 +87,38 @@ namespace ArkSurvival.Player
             }
 
             LogState();
+        }
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            if (hasFocus)
+            {
+                ApplyCursorLock();
+            }
+        }
+
+        private void UpdateCursorLock()
+        {
+            if (!_lockCursor || Cursor.lockState == CursorLockMode.Locked)
+            {
+                return;
+            }
+
+            if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+            {
+                ApplyCursorLock();
+            }
+        }
+
+        private void ApplyCursorLock()
+        {
+            if (!_lockCursor)
+            {
+                return;
+            }
+
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
 
         private void LogState()
