@@ -9,6 +9,7 @@ namespace ArkSurvival.Player
         public CharacterMotor Motor { get; }
         public PlayerMovementConfig Config { get; }
         public PlayerStamina Stamina { get; }
+        public PlayerCrouchController Crouch { get; }
         public PlayerCamera Camera { get; }
         public Transform PlayerTransform { get; }
 
@@ -17,6 +18,7 @@ namespace ArkSurvival.Player
             CharacterMotor motor,
             PlayerMovementConfig config,
             PlayerStaminaConfig staminaConfig,
+            PlayerCrouchConfig crouchConfig,
             PlayerCamera camera,
             Transform playerTransform)
         {
@@ -24,6 +26,7 @@ namespace ArkSurvival.Player
             Motor = motor;
             Config = config;
             Stamina = new PlayerStamina(staminaConfig);
+            Crouch = new PlayerCrouchController(input, crouchConfig, motor.Controller, playerTransform);
             Camera = camera;
             PlayerTransform = playerTransform;
         }

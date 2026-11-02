@@ -9,6 +9,7 @@ namespace ArkSurvival.Player
         [SerializeField] private PlayerInputReader _input;
         [SerializeField] private CharacterMotor _motor;
         [SerializeField] private PlayerStaminaConfig _staminaConfig;
+        [SerializeField] private PlayerCrouchConfig _crouchConfig;
         [SerializeField] private PlayerCamera _camera;
         [SerializeField] private PlayerAnimator _animator;
         [SerializeField] private bool _lockCursor = true;
@@ -55,7 +56,12 @@ namespace ArkSurvival.Player
                 Debug.LogWarning("PlayerController: PlayerStaminaConfig не назначен — спринт и ролл будут недоступны.", this);
             }
 
-            _context = new PlayerContext(_input, _motor, _motor.Config, _staminaConfig, _camera, transform);
+            if (_crouchConfig == null)
+            {
+                Debug.LogWarning("PlayerController: PlayerCrouchConfig не назначен — присед будет работать в режиме Toggle с настройками по умолчанию.", this);
+            }
+
+            _context = new PlayerContext(_input, _motor, _motor.Config, _staminaConfig, _crouchConfig, _camera, transform);
             _stateMachine = new PlayerStateMachine(_context);
             _stateMachine.Start();
         }
@@ -72,6 +78,7 @@ namespace ArkSurvival.Player
             float deltaTime = Time.deltaTime;
             _context.Stamina.Tick(deltaTime);
             _context.Tick(deltaTime);
+            _context.Crouch.Tick(deltaTime);
             if (_input.JumpPressed)
             {
                 _context.BufferJump();
@@ -133,7 +140,9 @@ namespace ArkSurvival.Player
                 || !_motor.IsGrounded
                 || _context.IsInvulnerable
                 || !_context.CanRoll
-                || _context.Stamina.IsExhausted;
+                || _context.Stamina.IsExhausted
+                || _context.Crouch.WantsCrouch
+                || _context.Crouch.IsCrouched;
             if (!active)
             {
                 return;
@@ -141,7 +150,7 @@ namespace ArkSurvival.Player
 
             _nextLogTime = Time.unscaledTime + _logInterval;
             Debug.Log(
-                $"State={_stateMachine.CurrentName} Grounded={_motor.IsGrounded} Coyote={_motor.CoyoteActive} V={_motor.VerticalVelocity:F2} H={_motor.HorizontalSpeed:F2} Inv={_context.IsInvulnerable} RollCD={_context.RollCooldownRemaining:F2} Buf={_context.JumpBufferRemaining:F2} St={_context.Stamina.Current:F1}/{_context.Stamina.Max:F0} Exh={_context.Stamina.IsExhausted}",
+                $"State={_stateMachine.CurrentName} Grounded={_motor.IsGrounded} Coyote={_motor.CoyoteActive} V={_motor.VerticalVelocity:F2} H={_motor.HorizontalSpeed:F2} Inv={_context.IsInvulnerable} RollCD={_context.RollCooldownRemaining:F2} Buf={_context.JumpBufferRemaining:F2} St={_context.Stamina.Current:F1}/{_context.Stamina.Max:F0} Exh={_context.Stamina.IsExhausted} Crouch={_context.Crouch.IsCrouched} WantsCrouch={_context.Crouch.WantsCrouch} CanStand={_context.Crouch.CanStand} FreeH={_context.Crouch.FreeHeight:F2} CrouchAmount={_context.Crouch.CrouchAmount:F2}",
                 this);
         }
     }

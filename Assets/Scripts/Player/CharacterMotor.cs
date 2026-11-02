@@ -16,6 +16,7 @@ namespace ArkSurvival.Player
         private bool _jumpHeld;
 
         public PlayerMovementConfig Config => _config;
+        public CharacterController Controller => _controller;
         public bool IsGrounded => _isGrounded;
         public bool CoyoteActive => _coyoteTimer > 0f;
         public bool CanJump => _isGrounded || _coyoteTimer > 0f;
@@ -69,7 +70,20 @@ namespace ArkSurvival.Player
             Vector3 flat = new Vector3(direction.x, 0f, direction.z);
             if (flat.sqrMagnitude > 0.0001f)
             {
-                _moveDirection = flat.normalized;
+                if (speed > 0.0001f)
+                {
+                    Vector3 targetDirection = flat.normalized;
+                    if (accelerationScale < 1f)
+                    {
+                        float turnBlend = 1f - Mathf.Exp(-_config.RotationSpeed * accelerationScale * deltaTime);
+                        _moveDirection = Vector3.Slerp(_moveDirection, targetDirection, turnBlend).normalized;
+                    }
+                    else
+                    {
+                        _moveDirection = targetDirection;
+                    }
+                }
+
                 Quaternion targetRotation = Quaternion.LookRotation(_moveDirection, Vector3.up);
                 float blend = 1f - Mathf.Exp(-_config.RotationSpeed * deltaTime);
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, blend);
@@ -159,8 +173,18 @@ namespace ArkSurvival.Player
         {
             Vector3 center = transform.position + _controller.center;
             float feetOffset = _controller.height * 0.5f - _controller.radius;
+            float radius = _config.GroundCheckRadius;
             Vector3 checkPosition = center - Vector3.up * feetOffset + Vector3.up * _config.GroundCheckOffset;
-            return Physics.CheckSphere(checkPosition, _config.GroundCheckRadius, _config.GroundLayerMask, QueryTriggerInteraction.Ignore);
+            Vector3 castOrigin = checkPosition + Vector3.up * radius;
+            float castDistance = _config.GroundCheckOffset + radius;
+
+            if (!Physics.SphereCast(castOrigin, radius, Vector3.down, out RaycastHit hit, castDistance,
+                    _config.GroundLayerMask, QueryTriggerInteraction.Ignore))
+            {
+                return false;
+            }
+
+            return Vector3.Angle(hit.normal, Vector3.up) <= _controller.slopeLimit;
         }
     }
 }

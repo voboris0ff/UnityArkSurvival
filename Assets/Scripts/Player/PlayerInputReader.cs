@@ -3,6 +3,12 @@ using UnityEngine.InputSystem;
 
 namespace ArkSurvival.Player
 {
+    public enum LookDevice
+    {
+        Mouse,
+        Gamepad
+    }
+
     public sealed class PlayerInputReader : MonoBehaviour
     {
         [SerializeField] private InputActionReference _moveAction;
@@ -10,13 +16,29 @@ namespace ArkSurvival.Player
         [SerializeField] private InputActionReference _sprintAction;
         [SerializeField] private InputActionReference _jumpAction;
         [SerializeField] private InputActionReference _rollAction;
+        [SerializeField] private InputActionReference _crouchAction;
+
+        private LookDevice _lookDevice = LookDevice.Mouse;
 
         public Vector2 Move => ReadVector2(_moveAction);
-        public Vector2 Look => ReadVector2(_lookAction);
+
+        public Vector2 Look
+        {
+            get
+            {
+                Vector2 value = ReadVector2(_lookAction);
+                UpdateLookDevice();
+                return value;
+            }
+        }
+
+        public LookDevice CurrentLookDevice => _lookDevice;
         public bool SprintHeld => IsPressed(_sprintAction);
         public bool JumpPressed => WasPressedThisFrame(_jumpAction);
         public bool JumpHeld => IsPressed(_jumpAction);
         public bool RollPressed => WasPressedThisFrame(_rollAction);
+        public bool CrouchPressed => WasPressedThisFrame(_crouchAction);
+        public bool CrouchHeld => IsPressed(_crouchAction);
 
         private void Awake()
         {
@@ -25,6 +47,7 @@ namespace ArkSurvival.Player
             Enable(_sprintAction);
             Enable(_jumpAction);
             Enable(_rollAction);
+            Enable(_crouchAction);
         }
 
         private void OnDestroy()
@@ -34,6 +57,19 @@ namespace ArkSurvival.Player
             Disable(_sprintAction);
             Disable(_jumpAction);
             Disable(_rollAction);
+            Disable(_crouchAction);
+        }
+
+        private void UpdateLookDevice()
+        {
+            InputControl activeControl = _lookAction != null && _lookAction.action != null
+                ? _lookAction.action.activeControl
+                : null;
+
+            if (activeControl != null)
+            {
+                _lookDevice = activeControl.device is Gamepad ? LookDevice.Gamepad : LookDevice.Mouse;
+            }
         }
 
         private static Vector2 ReadVector2(InputActionReference reference)

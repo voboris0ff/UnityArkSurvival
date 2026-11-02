@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f11cbb52af65b1e48ac4f7c0f26d7e35, type: 3}
+  m_Name: PlayerCrouchConfig
+  m_EditorClassIdentifier: 
+  _crouchInputMode: 0
+  _crouchHeight: 1
+  _crouchCenterY: 0.5
+  _heightTransitionSpeed: 10
+  _ceilingSkin: 0.02
+  _ceilingLayerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  _crouchSpeed: 2.5
+  _crouchAcceleration: 20
+  _crouchDeceleration: 25
+  _crouchStepOffset: 0.25

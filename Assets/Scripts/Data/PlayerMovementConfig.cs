@@ -18,7 +18,7 @@ namespace ArkSurvival.Data
         [SerializeField] private float _fallGravityMultiplier = 1.8f;
         [SerializeField] private float _lowJumpGravityMultiplier = 2.2f;
         [SerializeField] private float _maxFallSpeed = 50f;
-        [SerializeField] private float _airControl = 0.5f;
+        [SerializeField] private float _airControl = 0.2f;
         [SerializeField] private float _coyoteTime = 0.15f;
         [SerializeField] private float _jumpBufferTime = 0.12f;
 

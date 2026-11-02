@@ -1,3 +1,4 @@
+using ArkSurvival.Data;
 using UnityEngine;
 
 namespace ArkSurvival.Player
@@ -5,76 +6,142 @@ namespace ArkSurvival.Player
     [DefaultExecutionOrder(-100)]
     public sealed class PlayerCamera : MonoBehaviour
     {
+        private const float RollFovDuration = 0.25f;
+
         [SerializeField] private Transform _target;
         [SerializeField] private PlayerInputReader _input;
-        [SerializeField] private float _distance = 4.5f;
-        [SerializeField] private float _lookHeight = 1.5f;
-        [SerializeField] private float _horizontalDegreesPerPixel = 0.15f;
-        [SerializeField] private float _verticalDegreesPerPixel = 0.1f;
-        [SerializeField] private float _rotationSmoothing = 0f;
-        [SerializeField] private float _verticalFollowTime = 0.12f;
-        [SerializeField] private float _verticalFollowMaxOffset = 1f;
-        [SerializeField] private float _pitchMin = -60f;
-        [SerializeField] private float _pitchMax = 75f;
-        [SerializeField] private float _startPitch = 15f;
+        [SerializeField] private PlayerCameraConfig _config;
+
+        private readonly PlayerCameraCollision _collision = new PlayerCameraCollision();
+
+        private Camera _camera;
+        private float _fovVelocity;
+        private float _rollFovRemaining;
+        private float _targetFov;
 
         private float _yaw;
         private float _pitch;
         private float _smoothedYaw;
         private float _smoothedPitch;
+        private float _smoothedYawVelocity;
+        private float _smoothedPitchVelocity;
         private float _pivotHeight;
+        private float _pivotVelocity;
         private bool _pivotReady;
 
-        public float Yaw => _smoothedYaw;
+        public float Yaw => _yaw;
+        public float Pitch => _pitch;
 
         private void Awake()
         {
+            _camera = GetComponent<Camera>();
+            if (_camera == null)
+            {
+                Debug.LogWarning($"{nameof(PlayerCamera)}: Camera component is missing.", this);
+            }
+
             if (_input == null)
             {
                 _input = GetComponentInParent<PlayerInputReader>();
             }
 
+            if (_config == null)
+            {
+                Debug.LogWarning($"{nameof(PlayerCamera)}: PlayerCameraConfig is not assigned.", this);
+                return;
+            }
+
             _yaw = transform.eulerAngles.y;
-            _pitch = Mathf.Clamp(_startPitch, _pitchMin, _pitchMax);
+            _pitch = Mathf.Clamp(_config.StartPitch, _config.PitchMin, _config.PitchMax);
             _smoothedYaw = _yaw;
             _smoothedPitch = _pitch;
+            _targetFov = _config.BaseFov;
+
+            if (_camera != null)
+            {
+                _camera.fieldOfView = _config.BaseFov;
+            }
         }
 
         private void Update()
         {
-            if (_input == null)
+            if (_input == null || _config == null)
             {
                 return;
             }
 
             Vector2 look = _input.Look;
-            _yaw += look.x * _horizontalDegreesPerPixel;
-            _pitch = Mathf.Clamp(_pitch - look.y * _verticalDegreesPerPixel, _pitchMin, _pitchMax);
 
-            if (_rotationSmoothing > 0f)
+            if (_input.CurrentLookDevice == LookDevice.Gamepad)
             {
-                float blend = 1f - Mathf.Exp(-Time.deltaTime / _rotationSmoothing);
-                _smoothedYaw = Mathf.Lerp(_smoothedYaw, _yaw, blend);
-                _smoothedPitch = Mathf.Lerp(_smoothedPitch, _pitch, blend);
+                Vector2 stick = ApplyStickResponse(look);
+                _yaw += stick.x * _config.StickDegreesPerSecondHorizontal * Time.deltaTime;
+                _pitch -= stick.y * _config.StickDegreesPerSecondVertical * Time.deltaTime;
+            }
+            else
+            {
+                _yaw += look.x * _config.MouseDegreesPerPixelHorizontal;
+                _pitch -= look.y * _config.MouseDegreesPerPixelVertical;
+            }
+
+            _pitch = Mathf.Clamp(_pitch, _config.PitchMin, _config.PitchMax);
+
+            if (_config.RotationSmoothing > 0f)
+            {
+                _smoothedYaw = Mathf.SmoothDampAngle(
+                    _smoothedYaw,
+                    _yaw,
+                    ref _smoothedYawVelocity,
+                    _config.RotationSmoothing,
+                    Mathf.Infinity,
+                    Time.deltaTime);
+                _smoothedPitch = Mathf.SmoothDampAngle(
+                    _smoothedPitch,
+                    _pitch,
+                    ref _smoothedPitchVelocity,
+                    _config.RotationSmoothing,
+                    Mathf.Infinity,
+                    Time.deltaTime);
             }
             else
             {
                 _smoothedYaw = _yaw;
                 _smoothedPitch = _pitch;
+                _smoothedYawVelocity = 0f;
+                _smoothedPitchVelocity = 0f;
             }
+
+            if (_input.RollPressed)
+            {
+                _rollFovRemaining = RollFovDuration;
+            }
+            else if (_rollFovRemaining > 0f)
+            {
+                _rollFovRemaining = Mathf.Max(0f, _rollFovRemaining - Time.deltaTime);
+            }
+
+            bool sprinting = _input.SprintHeld && _input.Move.sqrMagnitude > 0.01f;
+            _targetFov = _rollFovRemaining > 0f
+                ? _config.RollFov
+                : sprinting ? _config.SprintFov : _config.BaseFov;
         }
 
         private void LateUpdate()
         {
-            if (_target == null)
+            if (_target == null || _config == null)
             {
                 return;
             }
 
             Quaternion orbitRotation = Quaternion.Euler(_smoothedPitch, _smoothedYaw, 0f);
             Vector3 targetPosition = _target.position;
-            Vector3 pivot = new Vector3(targetPosition.x, FollowPivotHeight(targetPosition.y + _lookHeight), targetPosition.z);
-            Vector3 position = pivot - orbitRotation * Vector3.forward * _distance;
+            Vector3 pivot = new Vector3(
+                targetPosition.x,
+                FollowPivotHeight(targetPosition.y + _config.LookHeight),
+                targetPosition.z);
+            pivot += Quaternion.Euler(0f, _smoothedYaw, 0f) * Vector3.right * _config.ShoulderOffset;
+            Vector3 position = pivot - orbitRotation * Vector3.forward * _config.Distance;
+            position = _collision.Resolve(pivot, position, _config, _target, Time.deltaTime);
 
             Vector3 lookDirection = pivot - position;
             if (lookDirection.sqrMagnitude > 0.0001f)
@@ -83,6 +150,34 @@ namespace ArkSurvival.Player
             }
 
             transform.SetPositionAndRotation(position, orbitRotation);
+
+            if (_camera != null)
+            {
+                _camera.fieldOfView = _config.FovSmoothTime > 0f
+                    ? Mathf.SmoothDamp(
+                        _camera.fieldOfView,
+                        _targetFov,
+                        ref _fovVelocity,
+                        _config.FovSmoothTime,
+                        Mathf.Infinity,
+                        Time.deltaTime)
+                    : _targetFov;
+            }
+        }
+
+        private Vector2 ApplyStickResponse(Vector2 stick)
+        {
+            float magnitude = Mathf.Min(stick.magnitude, 1f);
+            if (magnitude <= _config.StickDeadZone)
+            {
+                return Vector2.zero;
+            }
+
+            float normalized = Mathf.InverseLerp(_config.StickDeadZone, 1f, magnitude);
+            AnimationCurve curve = _config.SensitivityCurve;
+            float sensitivity = curve != null && curve.length > 0 ? curve.Evaluate(normalized) : normalized;
+
+            return stick.normalized * sensitivity;
         }
 
         private float FollowPivotHeight(float targetHeight)
@@ -90,24 +185,39 @@ namespace ArkSurvival.Player
             if (!_pivotReady)
             {
                 _pivotHeight = targetHeight;
+                _pivotVelocity = 0f;
                 _pivotReady = true;
+                return _pivotHeight;
             }
-            else if (_verticalFollowTime > 0f)
+
+            if (_config.VerticalFollowTime > 0f)
             {
-                float blend = 1f - Mathf.Exp(-Time.deltaTime / _verticalFollowTime);
-                _pivotHeight = Mathf.Lerp(_pivotHeight, targetHeight, blend);
+                _pivotHeight = Mathf.SmoothDamp(
+                    _pivotHeight,
+                    targetHeight,
+                    ref _pivotVelocity,
+                    _config.VerticalFollowTime,
+                    Mathf.Infinity,
+                    Time.deltaTime);
             }
             else
             {
                 _pivotHeight = targetHeight;
+                _pivotVelocity = 0f;
             }
 
-            if (_verticalFollowMaxOffset > 0f)
+            if (_config.VerticalFollowMaxOffset > 0f)
             {
-                _pivotHeight = Mathf.Clamp(
+                float clamped = Mathf.Clamp(
                     _pivotHeight,
-                    targetHeight - _verticalFollowMaxOffset,
-                    targetHeight + _verticalFollowMaxOffset);
+                    targetHeight - _config.VerticalFollowMaxOffset,
+                    targetHeight + _config.VerticalFollowMaxOffset);
+
+                if (!Mathf.Approximately(clamped, _pivotHeight))
+                {
+                    _pivotHeight = clamped;
+                    _pivotVelocity = 0f;
+                }
             }
 
             return _pivotHeight;
