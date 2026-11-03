@@ -10,16 +10,36 @@ namespace ArkSurvival.AI.Creatures
     /// </summary>
     public sealed class CreatureController : MonoBehaviour
     {
+        private const float TargetSearchRadius = 50f;
+        private const float MemoryLogInterval = 1f;
+
         [SerializeField] private CreatureConfig _config;
         [SerializeField] private NavMeshAgent _agent;
         [SerializeField] private Transform _homePoint;
 
+        [Tooltip("Точка глаз для проверки зрения. Пусто — берётся позиция существа + CreatureConfig.EyeHeight.")]
+        [SerializeField] private Transform _eyePoint;
+
+        [Tooltip("Цель зрения первой версии — игрок. Пусто — контроллер ищет её сам (объект на слое Player) при старте.")]
+        [SerializeField] private Transform _target;
+
         private CreatureNavigator _navigator;
+        private CreatureTargetMemory _memory;
+        private CreatureVision _vision;
+        private CreaturePerception _perception;
         private CreatureStateMachine _stateMachine;
         private Vector3 _homePosition;
+        private Transform _eyeTransform;
+        private bool _wasTargetVisible;
+        private bool _wasTargetRemembered;
+        private float _memoryLogTimer;
 
         public CreatureConfig Config => _config;
         public CreatureNavigator Navigator => _navigator;
+        public CreatureTargetMemory Memory => _memory;
+        public CreatureVision Vision => _vision;
+        public CreaturePerception Perception => _perception;
+        public Transform Target => _target;
         public CreatureStateMachine StateMachine => _stateMachine;
         public Transform HomePoint => _homePoint;
         public Vector3 HomePosition => _homePosition;
@@ -48,8 +68,36 @@ namespace ArkSurvival.AI.Creatures
                 return;
             }
 
+            if (_target == null)
+            {
+                _target = FindTargetOnPlayerLayer();
+            }
+
+            if (_target == null)
+            {
+                Debug.LogWarning(
+                    "CreatureController: цель зрения не назначена и на слое Player не найдена — зрение никого не увидит.",
+                    this);
+            }
+            else
+            {
+                WarnIfTargetNotOnPlayerLayer(_target);
+            }
+
             _navigator = new CreatureNavigator(_agent);
             _navigator.Initialize(_config.ArrivalDistance, _config.MoveSpeed);
+            _memory = new CreatureTargetMemory(_config.MemoryDuration);
+
+            _eyeTransform = ResolveEyePoint();
+            _vision = new CreatureVision(_eyeTransform, _config);
+            _perception = new CreaturePerception(_target, _vision, _config.PerceptionInterval);
+
+            if (_vision.ObstacleLayerMask == 0)
+            {
+                Debug.LogWarning(
+                    "CreatureController: ObstacleLayerMask зрения пуст — препятствия не будут перекрывать взгляд.",
+                    this);
+            }
 
             if (!_navigator.IsReady)
             {
@@ -59,8 +107,17 @@ namespace ArkSurvival.AI.Creatures
                     this);
             }
 
-            _stateMachine = new CreatureStateMachine(new CreatureContext(_navigator, HomePosition));
+            _stateMachine = new CreatureStateMachine(
+                new CreatureContext(_navigator, _memory, _vision, _perception, _config, HomePosition));
             _stateMachine.Start();
+
+            if (_target != null)
+            {
+                Debug.Log(
+                    $"CreatureController: существо готово. Цель «{_target.name}», зрение {_config.SightDistance} м / " +
+                    $"{_config.SightAngle}°, тик восприятия {_config.PerceptionInterval} с, память {_config.MemoryDuration} с.",
+                    this);
+            }
         }
 
         /// <summary>Команда вернуться к исходной точке. Реакция на события (страх, хп и т.п.) — отдельная задача.</summary>
@@ -94,7 +151,79 @@ namespace ArkSurvival.AI.Creatures
                 return;
             }
 
-            _stateMachine.Tick(Time.deltaTime);
+            float deltaTime = Time.deltaTime;
+
+            // Тик восприятия идёт всегда, независимо от состояния: дорогие проверки внутри
+            // выполняются только раз в PerceptionInterval. Память тикает каждый кадр,
+            // поэтому давность наблюдения считается верно даже при интервале 0.
+            _perception.Tick(deltaTime);
+            _memory.Tick(deltaTime);
+
+            LogPerceptionChanges();
+            _stateMachine.ApplyPerception();
+
+            _stateMachine.Tick(deltaTime);
+        }
+
+        /// <summary>
+        /// Пишет в Console каждое изменение обзора и памяти (не каждый кадр) — чтобы ручная проверка
+        /// в Play Mode была понятной без чтения инспектора.
+        /// </summary>
+        private void LogPerceptionChanges()
+        {
+            bool visible = _perception.HasResult && _perception.TargetVisible;
+            if (visible != _wasTargetVisible)
+            {
+                _wasTargetVisible = visible;
+                if (visible)
+                {
+                    Debug.Log(
+                        $"CreatureController: вижу цель «{_target?.name}» в точке {_perception.VisiblePoint}, " +
+                        $"дистанция {Vector3.Distance(_eyeTransform.position, _perception.VisiblePoint):F1} м.",
+                        this);
+                }
+                else
+                {
+                    Debug.Log("CreatureController: цель пропала из поля зрения.", this);
+                }
+            }
+
+            bool remembered = _memory.HasTarget;
+            if (remembered != _wasTargetRemembered)
+            {
+                _wasTargetRemembered = remembered;
+                _memoryLogTimer = 0f;
+                if (remembered)
+                {
+                    Debug.Log(
+                        $"CreatureController: цель запомнена, последняя позиция {_memory.LastKnownPosition}, " +
+                        $"память {_memory.MemoryDuration} с.",
+                        this);
+                }
+                else
+                {
+                    Debug.Log(
+                        $"CreatureController: память о цели истекла (не вижу {_memory.TimeSinceLastSeen:F1} с).",
+                        this);
+                }
+            }
+
+            // Раз в секунду, пока цель не видна, но ещё в памяти: видно, что давность растёт и позиция обновляется.
+            if (!remembered || visible)
+            {
+                _memoryLogTimer = 0f;
+                return;
+            }
+
+            _memoryLogTimer += Time.deltaTime;
+            if (_memoryLogTimer >= MemoryLogInterval)
+            {
+                _memoryLogTimer = 0f;
+                Debug.Log(
+                    $"CreatureController: память о цели жива, не вижу {_memory.TimeSinceLastSeen:F1} с, " +
+                    $"позиция {_memory.LastKnownPosition}, состояние {_stateMachine.CurrentName}.",
+                    this);
+            }
         }
 
         private bool ValidateReferences()
@@ -112,6 +241,73 @@ namespace ArkSurvival.AI.Creatures
             }
 
             return true;
+        }
+
+        /// <summary>Точка глаз: назначенный Transform, иначе временный дочерний объект на высоте CreatureConfig.EyeHeight.</summary>
+        private Transform ResolveEyePoint()
+        {
+            if (_eyePoint != null)
+            {
+                return _eyePoint;
+            }
+
+            GameObject eye = new GameObject("EyePoint");
+            eye.transform.SetParent(transform, false);
+            eye.transform.localPosition = new Vector3(0f, Mathf.Max(0f, _config.EyeHeight), 0f);
+            return eye.transform;
+        }
+
+        /// <summary>
+        /// Объект не на слое Player виден зрению хуже: если слой цели входит в ObstacleLayerMask,
+        /// собственный коллайдер цели перекрывает луч и цель считается невидимой.
+        /// </summary>
+        private void WarnIfTargetNotOnPlayerLayer(Transform target)
+        {
+            int playerLayer = LayerMask.NameToLayer("Player");
+            if (playerLayer < 0 || target.gameObject.layer == playerLayer)
+            {
+                return;
+            }
+
+            Debug.LogWarning(
+                $"CreatureController: объект «{target.name}» в Target не на слое Player — " +
+                "назначьте ему слой Player, иначе зрение может считать его препятствием.",
+                this);
+        }
+
+        /// <summary>
+        /// Цель первой версии зрения — игрок. Ищется один раз при старте (не в Update):
+        /// объект на слое Player, у которого есть хотя бы Collider.
+        /// Радиус поиска берётся с запасом — цель может позже подойти к границе обзора.
+        /// </summary>
+        private Transform FindTargetOnPlayerLayer()
+        {
+            int playerLayer = LayerMask.NameToLayer("Player");
+            if (playerLayer < 0)
+            {
+                Debug.LogWarning("CreatureController: слой Player не найден в TagManager — автопоиск цели недоступен.", this);
+                return null;
+            }
+
+            float radius = Mathf.Max(TargetSearchRadius, _config.SightDistance);
+            Collider[] colliders = Physics.OverlapSphere(
+                transform.position,
+                radius,
+                1 << playerLayer,
+                QueryTriggerInteraction.Ignore);
+
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                Collider collider = colliders[i];
+                if (collider == null || collider.isTrigger)
+                {
+                    continue;
+                }
+
+                return collider.transform;
+            }
+
+            return null;
         }
     }
 }

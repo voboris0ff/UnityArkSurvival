@@ -1,8 +1,9 @@
 namespace ArkSurvival.AI.Creatures.CreatureStates
 {
     /// <summary>
-    /// Покой: существо стоит на месте. Переход в Investigate/Chase появится вместе с восприятием
-    /// и памятью о цели (DINO-006+); Return запускается командой <see cref="CreatureStateMachine.RequestReturn"/>.
+    /// Покой: существо стоит на месте. Переходы в Investigate/Chase по зрению и памяти
+    /// выполняет <see cref="CreatureStateMachine.ApplyPerception"/>;
+    /// Return запускается командой <see cref="CreatureStateMachine.RequestReturn"/>.
     /// </summary>
     public sealed class IdleState : CreatureState
     {
