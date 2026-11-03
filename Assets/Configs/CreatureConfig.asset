@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1792ecdc868358342ad1ecef0fb5be90, type: 3}
+  m_Name: CreatureConfig
+  m_EditorClassIdentifier: 
+  _moveSpeed: 4
+  _chaseSpeed: 6
+  _turnSpeed: 5
+  _arrivalDistance: 0.5
+  _destinationUpdateInterval: 0.15
+  _perceptionInterval: 0.2
+  _sightDistance: 20
+  _sightAngle: 110
+  _eyeHeight: 1.5
+  _obstacleLayerMask:
+    serializedVersion: 2
+    m_Bits: 55
+  _hearingRange: 12
+  _memoryDuration: 5
+  _searchDuration: 6
+  _attackRange: 2.5
+  _attackAngle: 90
+  _attackCooldown: 1.5
+  _attackWindup: 0.4
+  _attackDamage: 10
