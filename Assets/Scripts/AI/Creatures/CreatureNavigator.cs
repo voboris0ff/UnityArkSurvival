@@ -12,6 +12,7 @@ namespace ArkSurvival.AI.Creatures
         private const float MinPathTolerance = 0.01f;
 
         private readonly NavMeshAgent _agent;
+        private readonly NavMeshPath _pathProbe = new NavMeshPath();
         private float _arrivalDistance;
         private float _defaultSpeed;
 
@@ -21,6 +22,8 @@ namespace ArkSurvival.AI.Creatures
         }
 
         public bool IsValid => _agent != null;
+
+        public NavMeshAgent Agent => _agent;
 
         public bool IsReady => _agent != null && _agent.enabled && _agent.isActiveAndEnabled && _agent.isOnNavMesh;
 
@@ -67,13 +70,66 @@ namespace ArkSurvival.AI.Creatures
         }
 
         /// <summary>
+        /// Возвращает true, если агенту уже поставлен путь и он ещё не пройден.
+        /// Пока путь считается, у агента <c>hasPath == false</c>, а <c>remainingDistance</c> равен 0,
+        /// поэтому сначала проверяется <c>pathPending</c>, а прибытие определяется по дистанции до destination.
+        /// </summary>
+        public bool IsPathActive
+        {
+            get
+            {
+                if (!IsReady || _agent.isStopped)
+                {
+                    return false;
+                }
+
+                if (_agent.pathPending)
+                {
+                    return true;
+                }
+
+                if (!_agent.hasPath || _agent.pathStatus == NavMeshPathStatus.PathInvalid)
+                {
+                    return false;
+                }
+
+                if (_agent.pathStatus == NavMeshPathStatus.PathComplete)
+                {
+                    return !HasArrived;
+                }
+
+                return _agent.remainingDistance > _arrivalDistance;
+            }
+        }
+
+        /// <summary>
+        /// Проверяет, что к точке можно построить путь, не меняя текущий маршрут агента.
+        /// </summary>
+        public bool CanReach(Vector3 position, float sampleRadius = 0f)
+        {
+            if (!IsReady || !TrySnapToNavMesh(position, sampleRadius, out Vector3 target))
+            {
+                return false;
+            }
+
+            if (!NavMesh.CalculatePath(_agent.transform.position, target, _agent.areaMask, _pathProbe) ||
+                _pathProbe.status != NavMeshPathStatus.PathComplete)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Пытается назначить новую точку. Возвращает false, если агент не готов
         /// или ближайшая точка поверхности не оказалась достаточно близко к запрошенной.
         /// </summary>
         /// <param name="allowPartialPath">Если false, частичный путь (до ближайшей достижимой точки) отклоняется.</param>
-        public bool TrySetDestination(Vector3 position, bool allowPartialPath = false)
+        /// <param name="sampleRadius">Радиус поиска ближайшей точки NavMesh; 0 — используется дистанция прибытия.</param>
+        public bool TrySetDestination(Vector3 position, bool allowPartialPath = false, float sampleRadius = 0f)
         {
-            if (!IsReady || !TrySnapToNavMesh(position, out Vector3 target))
+            if (!IsReady || !TrySnapToNavMesh(position, sampleRadius, out Vector3 target))
             {
                 return false;
             }
@@ -85,6 +141,8 @@ namespace ArkSurvival.AI.Creatures
                 return false;
             }
 
+            // Пока путь считается (pathPending), pathStatus ещё прежний, поэтому проверка откладывается
+            // до Tick состояния: частичный путь отклонит IsPathActive.
             if (!allowPartialPath && !_agent.pathPending && _agent.pathStatus == NavMeshPathStatus.PathPartial)
             {
                 _agent.ResetPath();
@@ -129,7 +187,7 @@ namespace ArkSurvival.AI.Creatures
             }
         }
 
-        private bool TrySnapToNavMesh(Vector3 position, out Vector3 result)
+        private bool TrySnapToNavMesh(Vector3 position, float sampleRadius, out Vector3 result)
         {
             result = position;
             if (_agent == null)
@@ -143,7 +201,7 @@ namespace ArkSurvival.AI.Creatures
                 areaMask = _agent.areaMask
             };
 
-            if (!NavMesh.SamplePosition(position, out NavMeshHit hit, _arrivalDistance, filter))
+            if (!NavMesh.SamplePosition(position, out NavMeshHit hit, Mathf.Max(sampleRadius, _arrivalDistance), filter))
             {
                 return false;
             }

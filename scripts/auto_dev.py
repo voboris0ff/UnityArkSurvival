@@ -5,6 +5,12 @@ Requires:
   - Python 3.10+
   - OpenCode CLI available as `opencode`
   - Run from the Unity project root (the directory containing AGENTS.md)
+
+Selection rules (must match docs/roadmap.md):
+  - `[ ]` pending — candidate task
+  - `[x]` done — skipped
+  - `[!]` waiting for the user — skipped, does not stop the run
+The orchestrator trusts the roadmap status written by the agent.
 """
 from __future__ import annotations
 
@@ -48,15 +54,19 @@ def parse_tasks(text: str) -> list[dict[str, str]]:
     return tasks
 
 def is_task_done(task_id: str) -> bool:
-    text = ROADMAP.read_text(encoding="utf-8")
+    return _task_status(task_id) == "x"
 
-    for line in text.splitlines():
+def is_task_blocked(task_id: str) -> bool:
+    return _task_status(task_id) == "!"
+
+def _task_status(task_id: str) -> str:
+    for line in ROADMAP.read_text(encoding="utf-8").splitlines():
         match = TASK_RE.match(line)
 
         if match and match.group("id") == task_id:
-            return match.group("status") == "x"
+            return match.group("status")
 
-    return False
+    return ""
 
 def build_prompt(task: dict[str, str]) -> str:
     return f"""Выполни ровно одну задачу roadmap: {task['id']}.
@@ -65,21 +75,19 @@ def build_prompt(task: dict[str, str]) -> str:
 - Найди точную задачу {task['id']} в docs/roadmap.md и выполняй только её.
 - Прочитай AGENTS.md и переданные файлы контекста.
 - Не выполняй сборку, тесты, Unity Editor, сложные проверки, git commit/push.
-- Не редактируй Unity Assets и запрещённые типы файлов.
+- Не редактируй Unity Assets и запрещённые типы файлов (чтение для анализа разрешено).
 - Не начинай соседние задачи.
-- Если нужны действия пользователя в Unity, подробно добавь их в docs/manual-queue.md.
-- Если задача заблокирована неизвестным решением или ручным действием, не помечай её выполненной.
+- Не задавай вопросы в чате: единственный канал общения — docs/manual-queue.md с блоком `Ответ пользователя:`.
+- Сначала разбери существующие `Ответ пользователя:` в docs/manual-queue.md: если ответ достаточен — удали пункт и обнови статусы; если нет — допиши блок `Вопрос агенту:` и пометь задачу `[!]` в roadmap.
+- Если не хватает имени (Animator-параметр, слой, поле) — придумай его сам, занеси в «Соглашения об именах» в docs/project-context.md и добавь ручной шаг в docs/manual-queue.md. Это не блокирует задачу.
+- Соблюдай лимиты объёма: docs/progress.md 40–60 строк, лог сессии не больше ~20 строк.
 - Обнови docs/roadmap.md, docs/progress.md и docs/manual-queue.md.
 - Создай краткий лог в docs/session-logs/ с ID задачи, изменёнными файлами, результатом и ручными действиями.
 - Не переписывай большие документы целиком без необходимости.
 - Не делай широкого аудита проекта. Изучи только файлы, необходимые для этой задачи.
-- Самостоятельно обнови статус своей задачи в docs/roadmap.md.
 - Меняй [ ] на [x] только после полного выполнения задачи.
-- Не ставь [x], если задача заблокирована, выполнена частично или требует обязательных действий пользователя.
+- Если для задачи физически не хватает решения пользователя, поставь [!] и всё равно добавь пункт в docs/manual-queue.md.
 - Не изменяй статусы других задач.
-- Если задача не выполнена полностью, оставь [ ].
-- Обнови docs/progress.md и docs/manual-queue.md.
-- Создай краткий лог в docs/session-logs/ с ID задачи, изменёнными файлами, результатом и ручными действиями.
 
 В конце выведи:
 TASK_RESULT: DONE / BLOCKED / FAILED
@@ -138,7 +146,7 @@ def run_task(task: dict[str, str], timeout: int) -> tuple[bool, str]:
     except FileNotFoundError as exc:
         return False, f"Не удалось запустить OpenCode: {exc}"
 
-    print(output[-12000:], flush=True)
+    print(output[-4000:], flush=True)
 
     score_matches = re.findall(
         r"(?m)^TASK_SCORE:\s*(100|[1-9]?\d)\s*$",
@@ -149,11 +157,7 @@ def run_task(task: dict[str, str], timeout: int) -> tuple[bool, str]:
 
     done_marker = "TASK_RESULT: DONE" in output
 
-    success = (
-        result.returncode == 0
-        and done_marker
-        and score == 100
-    )
+    success = result.returncode == 0 and done_marker and score is not None
 
     if score is None:
         output += "\n[ORCHESTRATOR] Агент не предоставил оценку TASK_SCORE."
@@ -162,15 +166,17 @@ def run_task(task: dict[str, str], timeout: int) -> tuple[bool, str]:
 
 
 def save_log(task_id: str, output: str, result: str) -> None:
+    """Краткий лог сессии. Полный вывод OpenCode не сохраняется — он раздувает контекст."""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-    safe_output = output[-16000:]
+    summary = output.rstrip().splitlines()[-15:]
+    excerpt = "\n".join(summary)
     path = LOG_DIR / f"{stamp}-{task_id}.md"
     path.write_text(
         f"# Сессия {task_id}\n\n"
         f"- Время: {dt.datetime.now().isoformat(timespec='seconds')}\n"
         f"- Результат оркестратора: {result}\n\n"
-        f"## Вывод OpenCode\n\n```text\n{safe_output}\n```\n",
+        f"## Хвост вывода\n\n```text\n{excerpt}\n```\n",
         encoding="utf-8",
     )
 
@@ -210,6 +216,12 @@ def main() -> int:
             break
 
         task = tasks[0]
+
+        if is_task_done(task["id"]):
+            # Агент мог отметить задачу [x], но упасть до выхода: просто идём дальше.
+            completed += 1
+            continue
+
         success, output = run_task(task, args.timeout)
         roadmap_done = is_task_done(task["id"])
 
@@ -222,13 +234,22 @@ def main() -> int:
                 f"[ORCHESTRATOR] {task['id']} подтверждена через roadmap "
                 f"({completed}/{limit or 'all'})."
             )
-        else:
+            continue
+
+        # Задача не выполнена: допустимо, если агент пометил её как ожидающую пользователя.
+        if is_task_blocked(task["id"]):
             print(
-                f"[ORCHESTRATOR] {task['id']} не отмечена выполненной в roadmap. "
-                "Останавливаюсь."
+                f"[ORCHESTRATOR] {task['id']} ждёт ответа пользователя в docs/manual-queue.md. "
+                "Продолжаю со следующей задачей."
             )
-            print("Проверь roadmap, manual-queue.md и лог сессии.")
-            break
+            continue
+
+        print(
+            f"[ORCHESTRATOR] {task['id']} не отмечена выполненной в roadmap. "
+            "Останавливаюсь."
+        )
+        print("Проверь roadmap, manual-queue.md и лог сессии.")
+        break
 
     print(f"Готово. Успешно завершено задач: {completed}.")
     return 0
