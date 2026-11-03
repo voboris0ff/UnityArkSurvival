@@ -14,9 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _walkSpeed: 4
   _sprintSpeed: 7
-  _acceleration: 30
-  _deceleration: 35
-  _rotationSpeed: 15
+  _acceleration: 15
+  _deceleration: 15
+  _rotationSpeed: 8
   _jumpHeight: 3
   _gravity: 25
   _fallGravityMultiplier: 1

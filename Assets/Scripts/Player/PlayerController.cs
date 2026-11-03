@@ -79,6 +79,11 @@ namespace ArkSurvival.Player
             _context.Stamina.Tick(deltaTime);
             _context.Tick(deltaTime);
             _context.Crouch.Tick(deltaTime);
+            if (_camera != null)
+            {
+                _camera.SetCrouchAmount(_context.Crouch.CrouchAmount);
+            }
+
             if (_input.JumpPressed)
             {
                 _context.BufferJump();
@@ -150,7 +155,7 @@ namespace ArkSurvival.Player
 
             _nextLogTime = Time.unscaledTime + _logInterval;
             Debug.Log(
-                $"State={_stateMachine.CurrentName} Grounded={_motor.IsGrounded} Coyote={_motor.CoyoteActive} V={_motor.VerticalVelocity:F2} H={_motor.HorizontalSpeed:F2} Inv={_context.IsInvulnerable} RollCD={_context.RollCooldownRemaining:F2} Buf={_context.JumpBufferRemaining:F2} St={_context.Stamina.Current:F1}/{_context.Stamina.Max:F0} Exh={_context.Stamina.IsExhausted} Crouch={_context.Crouch.IsCrouched} WantsCrouch={_context.Crouch.WantsCrouch} CanStand={_context.Crouch.CanStand} FreeH={_context.Crouch.FreeHeight:F2} CrouchAmount={_context.Crouch.CrouchAmount:F2}",
+                $"State={_stateMachine.CurrentName} Grounded={_motor.IsGrounded} Coyote={_motor.CoyoteActive} V={_motor.VerticalVelocity:F2} H={_motor.HorizontalSpeed:F2} Inv={_context.IsInvulnerable} RollCD={_context.RollCooldownRemaining:F2} Buf={_context.JumpBufferRemaining:F2} St={_context.Stamina.Current:F1}/{_context.Stamina.Max:F0} Exh={_context.Stamina.IsExhausted} Crouch={_context.Crouch.IsCrouched} WantsCrouch={_context.Crouch.WantsCrouch} CanStand={_context.Crouch.CanStand} FreeH={_context.Crouch.FreeHeight:F2} CH={_context.Crouch.CurrentHeight:F2} Step={_context.Crouch.StepOffset:F2} CrouchAmount={_context.Crouch.CrouchAmount:F2}",
                 this);
         }
     }

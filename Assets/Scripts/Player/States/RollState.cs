@@ -16,6 +16,7 @@ namespace ArkSurvival.Player.States
             _elapsed = 0f;
             _direction = ResolveDirection();
             Context.Motor.FaceDirection(_direction);
+            Context.Crouch.BeginRollCapsule();
             Context.Stamina.TrySpendRoll();
             Context.StartRollCooldown();
             UpdateInvulnerability();
@@ -23,6 +24,7 @@ namespace ArkSurvival.Player.States
 
         public override void Exit()
         {
+            Context.Crouch.CancelRollCapsule();
             Context.IsInvulnerable = false;
         }
 
@@ -33,6 +35,7 @@ namespace ArkSurvival.Player.States
 
             if (_elapsed >= Context.Config.RollDuration)
             {
+                Context.Crouch.EndRollCapsule();
                 Machine.ChangeState(ResolveGroundedState());
                 return;
             }

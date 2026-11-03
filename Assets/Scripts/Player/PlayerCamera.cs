@@ -28,9 +28,15 @@ namespace ArkSurvival.Player
         private float _pivotHeight;
         private float _pivotVelocity;
         private bool _pivotReady;
+        private float _crouchAmount;
 
         public float Yaw => _yaw;
         public float Pitch => _pitch;
+
+        public void SetCrouchAmount(float amount)
+        {
+            _crouchAmount = Mathf.Clamp01(amount);
+        }
 
         private void Awake()
         {
@@ -135,9 +141,10 @@ namespace ArkSurvival.Player
 
             Quaternion orbitRotation = Quaternion.Euler(_smoothedPitch, _smoothedYaw, 0f);
             Vector3 targetPosition = _target.position;
+            float lookHeight = Mathf.Lerp(_config.LookHeight, _config.CrouchLookHeight, _crouchAmount);
             Vector3 pivot = new Vector3(
                 targetPosition.x,
-                FollowPivotHeight(targetPosition.y + _config.LookHeight),
+                FollowPivotHeight(targetPosition.y + lookHeight),
                 targetPosition.z);
             pivot += Quaternion.Euler(0f, _smoothedYaw, 0f) * Vector3.right * _config.ShoulderOffset;
             Vector3 position = pivot - orbitRotation * Vector3.forward * _config.Distance;

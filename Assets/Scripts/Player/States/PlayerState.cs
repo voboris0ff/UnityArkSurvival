@@ -1,3 +1,4 @@
+using ArkSurvival.Data;
 using UnityEngine;
 
 namespace ArkSurvival.Player.States
@@ -25,12 +26,12 @@ namespace ArkSurvival.Player.States
 
         protected void Move(float speed, float deltaTime)
         {
-            Context.Motor.Move(Context.MoveDirection, speed, deltaTime);
+            MoveInternal(Context.MoveDirection, speed, deltaTime);
         }
 
         protected void Stop(float deltaTime)
         {
-            Context.Motor.Move(Vector3.zero, 0f, deltaTime);
+            MoveInternal(Vector3.zero, 0f, deltaTime);
         }
 
         protected bool TryStartRoll()
@@ -39,6 +40,11 @@ namespace ArkSurvival.Player.States
                 || !Context.CanRoll
                 || !Context.Motor.IsGrounded
                 || !Context.Stamina.CanSpendRoll)
+            {
+                return false;
+            }
+
+            if (!Context.Crouch.TryStand())
             {
                 return false;
             }
@@ -54,6 +60,11 @@ namespace ArkSurvival.Player.States
                 return Machine.Idle;
             }
 
+            if (Context.Crouch.IsCrouched)
+            {
+                return Machine.Walk;
+            }
+
             return Context.Input.SprintHeld && Context.Stamina.CanStartSprint
                 ? Machine.Sprint
                 : Machine.Walk;
@@ -63,8 +74,13 @@ namespace ArkSurvival.Player.States
         {
             if ((Context.Input.JumpPressed || Context.HasJumpBuffered) && Context.Motor.CanJump)
             {
-                Machine.ChangeState(Machine.Jump);
-                return true;
+                if (Context.Crouch.TryStand())
+                {
+                    Machine.ChangeState(Machine.Jump);
+                    return true;
+                }
+
+                Context.ConsumeJumpBuffer();
             }
 
             if (!Context.Motor.IsGrounded)
@@ -80,10 +96,35 @@ namespace ArkSurvival.Player.States
         {
             bool hasMove = Context.HasMove;
             Vector3 direction = hasMove ? Context.MoveDirection : Context.PlayerTransform.forward;
-            float speed = hasMove
-                ? (Context.Input.SprintHeld ? Context.Config.SprintSpeed : Context.Config.WalkSpeed)
-                : 0f;
+            float speed = 0f;
+            if (hasMove)
+            {
+                PlayerCrouchConfig crouchConfig = Context.Crouch.Config;
+                if (Context.Crouch.IsCrouched && crouchConfig != null)
+                {
+                    speed = crouchConfig.CrouchSpeed;
+                }
+                else
+                {
+                    speed = Context.Input.SprintHeld ? Context.Config.SprintSpeed : Context.Config.WalkSpeed;
+                }
+            }
+
             Context.Motor.Move(direction, speed, deltaTime, Context.Config.AirControl);
+        }
+
+        private void MoveInternal(Vector3 direction, float speed, float deltaTime)
+        {
+            PlayerCrouchConfig crouchConfig = Context.Crouch.Config;
+            if (Context.Crouch.IsCrouched && crouchConfig != null)
+            {
+                float targetSpeed = speed > 0.0001f ? crouchConfig.CrouchSpeed : 0f;
+                Context.Motor.Move(direction, targetSpeed, deltaTime, 1f,
+                    crouchConfig.CrouchAcceleration, crouchConfig.CrouchDeceleration);
+                return;
+            }
+
+            Context.Motor.Move(direction, speed, deltaTime);
         }
     }
 }

@@ -6,6 +6,7 @@ namespace ArkSurvival.Player
     public sealed class PlayerCrouchController
     {
         private const int CeilingHitCapacity = 16;
+        private const float StepSafetyMargin = 0.01f;
         private static readonly RaycastHit[] CeilingHits = new RaycastHit[CeilingHitCapacity];
 
         private readonly PlayerInputReader _input;
@@ -20,9 +21,12 @@ namespace ArkSurvival.Player
 
         private bool _wantsCrouch;
         private bool _isCrouched;
+        private bool _forcedCrouch;
+        private bool _rollCapsuleActive;
         private float _currentHeight;
         private float _currentCenterY;
         private float _freeHeight;
+        private float _crouchAmount;
 
         public PlayerCrouchController(
             PlayerInputReader input,
@@ -47,9 +51,13 @@ namespace ArkSurvival.Player
             }
         }
 
+        public PlayerCrouchConfig Config => _config;
         public bool WantsCrouch => _wantsCrouch;
         public bool IsCrouched => _isCrouched;
         public float FreeHeight => _freeHeight;
+        public float StandHeight => _standHeight;
+        public float CurrentHeight => _currentHeight;
+        public float StepOffset => _controller != null ? _controller.stepOffset : 0f;
 
         public bool CanStand
         {
@@ -64,20 +72,9 @@ namespace ArkSurvival.Player
             }
         }
 
-        public float CrouchAmount
-        {
-            get
-            {
-                float crouchHeight = CrouchTargetHeight;
-                float range = _standHeight - crouchHeight;
-                if (range <= 0.0001f)
-                {
-                    return _isCrouched ? 1f : 0f;
-                }
-
-                return Mathf.Clamp01((_standHeight - _currentHeight) / range);
-            }
-        }
+        public float CrouchAmount => _controller != null && _config != null
+            ? _crouchAmount
+            : (_isCrouched ? 1f : 0f);
 
         private float CrouchTargetHeight
         {
@@ -100,6 +97,55 @@ namespace ArkSurvival.Player
             }
         }
 
+        public bool TryStand()
+        {
+            if (!_isCrouched)
+            {
+                _forcedCrouch = false;
+                return true;
+            }
+
+            if (!CanStand)
+            {
+                return false;
+            }
+
+            _forcedCrouch = false;
+            _wantsCrouch = false;
+            _isCrouched = false;
+            return true;
+        }
+
+        // Временный модификатор капсулы на время ролла: стойка (IsCrouched/WantsCrouch) не меняется.
+        public void BeginRollCapsule()
+        {
+            _rollCapsuleActive = true;
+        }
+
+        // Конец ролла: если встать некуда — принудительный присед с авто-вставанием после освобождения потолка.
+        public void EndRollCapsule()
+        {
+            _rollCapsuleActive = false;
+
+            if (!CanStand)
+            {
+                ForceCrouch();
+            }
+        }
+
+        // Прерывание ролла (падение): модификатор снимается, стойка остаётся текущей.
+        public void CancelRollCapsule()
+        {
+            _rollCapsuleActive = false;
+        }
+
+        private void ForceCrouch()
+        {
+            _forcedCrouch = true;
+            _wantsCrouch = true;
+            _isCrouched = true;
+        }
+
         public void Tick(float deltaTime)
         {
             UpdateWantsCrouch();
@@ -107,10 +153,34 @@ namespace ArkSurvival.Player
             if (_controller == null || _config == null)
             {
                 _isCrouched = _wantsCrouch;
+                _crouchAmount = _isCrouched ? 1f : 0f;
                 return;
             }
 
             _freeHeight = MeasureFreeHeight();
+            UpdateCrouchState();
+            ApplyCapsule(deltaTime);
+        }
+
+        private void UpdateCrouchState()
+        {
+            if (_forcedCrouch)
+            {
+                bool holdRequested = _config.InputMode == CrouchInputMode.Hold
+                    && _input != null
+                    && _input.CrouchHeld;
+                if (!holdRequested && CanStand)
+                {
+                    _forcedCrouch = false;
+                    _wantsCrouch = false;
+                    _isCrouched = false;
+                    return;
+                }
+
+                _wantsCrouch = true;
+                _isCrouched = true;
+                return;
+            }
 
             if (_wantsCrouch)
             {
@@ -120,8 +190,6 @@ namespace ArkSurvival.Player
             {
                 _isCrouched = false;
             }
-
-            ApplyCapsule(deltaTime);
         }
 
         private void UpdateWantsCrouch()
@@ -136,13 +204,26 @@ namespace ArkSurvival.Player
 
             if (_input != null && _input.CrouchPressed)
             {
-                _wantsCrouch = !_wantsCrouch;
+                if (_forcedCrouch)
+                {
+                    _forcedCrouch = false;
+                    _wantsCrouch = false;
+                }
+                else
+                {
+                    _wantsCrouch = !_wantsCrouch;
+                }
             }
         }
 
         private void ApplyCapsule(float deltaTime)
         {
             float targetHeight = _isCrouched ? CrouchTargetHeight : _standHeight;
+            if (_rollCapsuleActive)
+            {
+                targetHeight = Mathf.Min(targetHeight, CrouchTargetHeight);
+            }
+
             if (targetHeight > _currentHeight)
             {
                 targetHeight = Mathf.Min(targetHeight, Mathf.Max(_currentHeight, _freeHeight));
@@ -158,8 +239,37 @@ namespace ArkSurvival.Player
             center.y = _currentCenterY;
             _controller.center = center;
 
-            float desiredStep = _isCrouched ? _config.CrouchStepOffset : _standStepOffset;
-            _controller.stepOffset = Mathf.Clamp(desiredStep, 0f, Mathf.Min(_standStepOffset, _currentHeight * 0.5f));
+            ApplyStepOffset();
+            UpdateCrouchAmount(deltaTime);
+        }
+
+        private void UpdateCrouchAmount(float deltaTime)
+        {
+            // CrouchAmount ведёт стойка, а не фактическая капсула: временное сжатие в ролле
+            // и её обратный рост не должны опускать pivot камеры и Blend Tree.
+            float target = _isCrouched ? 1f : 0f;
+            float range = _standHeight - CrouchTargetHeight;
+            float speed = Mathf.Max(0f, _config.HeightTransitionSpeed);
+
+            if (range <= 0.0001f || speed <= 0f)
+            {
+                _crouchAmount = target;
+                return;
+            }
+
+            _crouchAmount = Mathf.MoveTowards(_crouchAmount, target, speed / range * deltaTime);
+        }
+
+        private void ApplyStepOffset()
+        {
+            // CharacterController требует stepOffset меньше половины высоты капсулы:
+            // у низкой капсулы большое значение даёт «залезание» на ступени и проваливание.
+            float desired = _isCrouched || _rollCapsuleActive ? _config.CrouchStepOffset : _standStepOffset;
+            float heightLimit = Mathf.Max(0f, _currentHeight * 0.5f - StepSafetyMargin);
+            _controller.stepOffset = Mathf.Clamp(
+                desired,
+                0f,
+                Mathf.Min(_standStepOffset, heightLimit));
         }
 
         private float MeasureFreeHeight()

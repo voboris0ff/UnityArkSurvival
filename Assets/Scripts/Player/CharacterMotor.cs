@@ -60,7 +60,8 @@ namespace ArkSurvival.Player
             ApplyGravity(deltaTime);
         }
 
-        public void Move(Vector3 direction, float speed, float deltaTime, float accelerationScale = 1f)
+        public void Move(Vector3 direction, float speed, float deltaTime, float accelerationScale = 1f,
+            float acceleration = -1f, float deceleration = -1f)
         {
             if (_controller == null || _config == null)
             {
@@ -89,7 +90,9 @@ namespace ArkSurvival.Player
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, blend);
             }
 
-            float rate = (speed > _currentSpeed ? _config.Acceleration : _config.Deceleration)
+            float accelerationRate = acceleration >= 0f ? acceleration : _config.Acceleration;
+            float decelerationRate = deceleration >= 0f ? deceleration : _config.Deceleration;
+            float rate = (speed > _currentSpeed ? accelerationRate : decelerationRate)
                 * Mathf.Max(0f, accelerationScale);
             _currentSpeed = Mathf.MoveTowards(_currentSpeed, speed, rate * deltaTime);
 

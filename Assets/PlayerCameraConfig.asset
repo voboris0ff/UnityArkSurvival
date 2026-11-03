@@ -14,11 +14,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _distance: 4.5
   _lookHeight: 1.5
+  _crouchLookHeight: 1
+  _shoulderOffset: 0.5
   _pitchMin: -30
   _pitchMax: 55
   _startPitch: 15
-  _mouseDegreesPerPixelHorizontal: 0.15
-  _mouseDegreesPerPixelVertical: 0.1
+  _mouseDegreesPerPixelHorizontal: 1.5
+  _mouseDegreesPerPixelVertical: 1
   _stickDegreesPerSecondHorizontal: 180
   _stickDegreesPerSecondVertical: 120
   _stickDeadZone: 0.15
@@ -46,6 +48,16 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  _rotationSmoothing: 0
+  _collisionRadius: 0.2
+  _collisionLayerMask:
+    serializedVersion: 2
+    m_Bits: 55
+  _minDistance: 0.5
+  _collisionReturnSpeed: 10
+  _baseFov: 60
+  _sprintFov: 68
+  _rollFov: 72
+  _fovSmoothTime: 0.15
+  _rotationSmoothing: 0.05
   _verticalFollowTime: 0.12
-  _verticalFollowMaxOffset: 1
+  _verticalFollowMaxOffset: 4

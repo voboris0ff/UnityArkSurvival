@@ -8,6 +8,7 @@ namespace ArkSurvival.Data
         [Header("Pose")]
         [SerializeField] private float _distance = 4.5f;
         [SerializeField] private float _lookHeight = 1.5f;
+        [SerializeField] private float _crouchLookHeight = 1f;
         [SerializeField] private float _shoulderOffset = 0.5f;
         [SerializeField] private float _pitchMin = -30f;
         [SerializeField] private float _pitchMax = 55f;
@@ -42,6 +43,7 @@ namespace ArkSurvival.Data
 
         public float Distance => _distance;
         public float LookHeight => _lookHeight;
+        public float CrouchLookHeight => _crouchLookHeight;
         public float ShoulderOffset => _shoulderOffset;
         public float PitchMin => _pitchMin;
         public float PitchMax => _pitchMax;
