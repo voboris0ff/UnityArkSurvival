@@ -35,6 +35,9 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
         private bool _waiting;
         private bool _destinationAssigned;
 
+        /// <summary>Опора текущего поиска — последняя известная позиция на входе (DINO-023).</summary>
+        public Vector3 Anchor => _anchor;
+
         public SearchState(CreatureStateMachine machine) : base(machine)
         {
         }

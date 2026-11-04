@@ -35,12 +35,26 @@
 | Патруль | `PatrolState` | Idle без цели → Patrol; скорость `PatrolSpeed`, пауза на точке с шансом `PatrolWaitChance` на `Random.Range(PatrolWaitMin, PatrolWaitMax)`; нет точки — повтор через 0.5 с; смена дома > 0.05 м сбрасывает маршрут (DINO-018) | `PatrolState`, `CreatureStateMachine` |
 | Слух | namespace `ArkSurvival.AI.Perception` | контракт шума (DINO-019): `NoiseEvent`, `NoiseBroadcaster` | `Assets/Scripts/AI/Perception/` |
 | Слух | `NoiseEvent(position, loudness, source)` | `readonly struct`: `Position` (точка шума), `Loudness` 0..1 (обрезается), `Source` (`Transform`, допустим `null`), `HasSource`, `SourceName` | `NoiseEvent` |
-| Слух | `NoiseBroadcaster.Emit(...)` / `Emitted` | статический ретранслятор: `Emit(NoiseEvent)` или `Emit(position, loudness, source)`, подписка через `event Action<NoiseEvent> Emitted`; слышимость не считает (DINO-020) | `NoiseBroadcaster` |
+| Слух | `NoiseBroadcaster.Emit(...)` / `Emitted` | статический ретранслятор: `Emit(NoiseEvent)` или `Emit(position, loudness, source)`, подписка через `event Action<NoiseEvent> Emitted`; слышимость не считает | `NoiseBroadcaster` |
+| Слух | `CreatureHearing.Hear(NoiseEvent)` | приём шума (DINO-020): слышно, если дистанция ≤ `HearingRange * Loudness`; собственный шум (источник — слушатель или его потомок) игнорируется; хранит последнее событие (`LastNoise`, `LastHeardPosition`, `LastDistance`) | `CreatureHearing` |
+| Слух | `CreatureController.Hearing`, `CreatureContext.Hearing` | доступ к слуху; память и переходы по шуму — DINO-021 | `CreatureController`, `CreatureContext` |
+| Слух | `CreatureNoiseDebugInput` | временный отладочный издатель шума по клавише `N` для проверки в Play Mode (можно удалить, когда ручные проверки DINO-020/021 закрыты) | `CreatureNoiseDebugInput` |
+| Слух | `PlayerNoiseEmitter` | шум игрока (DINO-022): шаги бега — `_sprintLoudness = 0.7` каждые `_sprintStepInterval = 0.35` с в состоянии `Sprint`; приземление — `_landingLoudness = 1.0` при скорости падения ≥ `_landingMinFallSpeed = 3` м/с; позиция и источник — Transform игрока. Временные значения, подбираются вручную | `PlayerNoiseEmitter` |
+| Слух | `CreatureStateMachine.NoiseRetargetDistance` | 3 м, временное: шум ближе этого к осматриваемой точке не перезапускает осмотр (DINO-023) | `CreatureStateMachine` |
+| Слух | `SearchState.Anchor` | опора текущего поиска (последняя известная позиция на входе); по ней определяется «шум внутри области поиска» (DINO-023) | `SearchState`, `CreatureStateMachine` |
 
 ## Отладочные средства
 - `Assets/CreatureDebuger.cs` — компонент `CreatureDebugInput` (класс назван иначе, чем файл): по клавише `R` вызывает `CreatureController.RequestReturn()`.
 
 Новое имя добавляется сюда в той же сессии, где появилось, и сопровождается пунктом в `manual-queue.md`.
+
+## Приоритеты зрения и слуха (DINO-023)
+- Зрение всегда важнее слуха: если цель видна, услышанный шум не меняет поведение (только лог).
+- `Chase` шумом не прерывается — погоня за видимой/помнимой целью имеет приоритет.
+- `Return` (по команде `R`) шумом не отменяется.
+- `Search`: шум внутри области поиска (`SearchRadius` вокруг `SearchState.Anchor`) поиск не меняет; шум снаружи переключает на `Investigate` его точки.
+- `Patrol`, `Idle`, `Investigate`: шум запускает `Investigate` к приблизительной точке; в `Investigate` шум ближе `NoiseRetargetDistance` (3 м, временное) только обновляет память.
+- Порядок кадра: `ApplyPerception` → `ApplyNoise` → `StateMachine.Tick`.
 
 ## Реализовано
 
@@ -48,6 +62,7 @@
 - `PlayerController`, `PlayerInputReader`, `CharacterMotor`; FSM: Idle, Walk, Sprint, Jump, Fall, Roll.
 - Jump buffer, coyote time, выносливость, приседание отдельным слоем, камера от третьего лица.
 - `PlayerAnimator` публикует параметры в Animator. Игрок — layer 6 в `SampleScene`, системы здоровья нет.
+- `PlayerNoiseEmitter` (DINO-022) — шум игрока: шаги бега (= Sprint, 0.7 каждые 0.35 с) и приземление (= падение ≥ 3 м/с, 1.0) через `NoiseBroadcaster.Emit`. `PlayerController` не менялся; значения временные.
 
 ### Существо (`Assets/Scripts/AI/Creatures/`)
 - `CreatureConfig` (DINO-002) — параметры навигации, восприятия, памяти и атаки; ассет `Assets/Configs/CreatureConfig.asset`.
@@ -61,7 +76,8 @@
 - `CreaturePatrolPointSelector` (DINO-017) — выбор случайной достижимой точки патруля вокруг `HomePosition` (`TrySelectPoint`).
 - `PatrolState` (DINO-018) — свободное патрулирование вокруг домашней точки: `Idle` без цели сразу ведёт в `Patrol`, точка из `CreaturePatrolPointSelector`, паузы по `PatrolWaitChance`/`PatrolWaitMin`–`Max`, повтор выбора через 0.5 с, маршрут сбрасывается при смене дома; `SearchState.Finish` теперь ведёт в `Patrol`.
 - `CreatureAnimator` (DINO-007) — публикует `Speed` из `NavMeshAgent.velocity`.
-- Контракт шума (DINO-019) — `AI/Perception`: `NoiseEvent` (позиция, громкость 0..1, источник) и `NoiseBroadcaster` (`Emit`/`Emitted`); слушателей, дальности и интеграции нет.
+- Контракт шума (DINO-019) — `AI/Perception`: `NoiseEvent` (позиция, громкость 0..1, источник) и `NoiseBroadcaster` (`Emit`/`Emitted`).
+- `CreatureHearing` (DINO-020) — приём шума: слышимость по дистанции и `HearingRange * Loudness`, собственный шум игнорируется, хранится последнее услышанное событие; подписка в `CreatureController.Start`, отписка в `OnDisable`. Переходов по шуму нет (DINO-021). Отладочный издатель — `CreatureNoiseDebugInput` (клавиша `N`).
 - `CreatureTargetMemory` (DINO-008) — хранилище цели: `Observe`, `UpdatePosition`, `Clear`, `HasTarget`/`TimeSinceLastSeen` по `MemoryDuration`; решения не принимает. Доступ через `CreatureContext.Memory`. С DINO-011 давность накапливается `Tick(dt)`, который вызывает `CreatureController.Update`.
 - `CreatureVision` (DINO-009) — проверка зрения: дистанция, угол обзора, raycast до коллайдера цели по `ObstacleLayerMask` (триггеры игнорируются). Возвращает точку реальной видимости; память не трогает. Доступ через `CreatureContext.Vision`.
 - `CreaturePerception` (DINO-010) — периодический тик зрения: `CanSee` вызывается раз в `PerceptionInterval` (`Tick(dt)` каждый кадр, Physics — по интервалу; `<= 0` — каждый кадр). Результат последней проверки: `HasResult`, `TargetVisible`, `VisiblePoint`; `Refresh()` — внеплановая проверка, `Reset()` — забыть. Память не меняет, решений не принимает. Доступ через `CreatureContext.Perception`; тикается в `CreatureController.Update`.

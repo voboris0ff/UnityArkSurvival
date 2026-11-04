@@ -66,6 +66,19 @@ namespace ArkSurvival.AI.Creatures
         }
 
         /// <summary>
+        /// Запоминает приблизительную позицию (например, услышанный шум) как последнюю известную,
+        /// не утверждая, что цель была видна: <see cref="Target"/> не меняется, давность отсчитывается заново.
+        /// Благодаря этому шум даёт точку для Investigate, но не делает игрока видимой целью (DINO-021).
+        /// </summary>
+        public void RememberPoint(Vector3 position)
+        {
+            _lastKnownPosition = position;
+            _lastSeenTime = Time.time;
+            _elapsedTime = 0f;
+            _hasMemory = true;
+        }
+
+        /// <summary>
         /// Обновляет позицию уже известной цели, не меняя время наблюдения.
         /// Возвращает false, если цель не та, что в памяти, или памяти нет — тогда время и позиция не трогаются.
         /// </summary>

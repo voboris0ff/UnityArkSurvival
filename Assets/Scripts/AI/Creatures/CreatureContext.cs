@@ -17,6 +17,9 @@ namespace ArkSurvival.AI.Creatures
         public CreatureConfig Config { get; }
         public CreatureHome Home { get; }
 
+        /// <summary>Приём шума и эффективная дальность (DINO-020). Переходы по шуму — DINO-021.</summary>
+        public CreatureHearing Hearing { get; }
+
         /// <summary>Выбор случайной достижимой точки патруля вокруг домашней точки (DINO-017).</summary>
         public CreaturePatrolPointSelector PatrolPoints { get; }
 
@@ -28,6 +31,7 @@ namespace ArkSurvival.AI.Creatures
             CreatureTargetMemory memory,
             CreatureVision vision,
             CreaturePerception perception,
+            CreatureHearing hearing,
             CreatureConfig config,
             CreatureHome home)
         {
@@ -35,6 +39,7 @@ namespace ArkSurvival.AI.Creatures
             Memory = memory;
             Vision = vision;
             Perception = perception;
+            Hearing = hearing;
             Config = config;
             Home = home;
             PatrolPoints = new CreaturePatrolPointSelector(this);

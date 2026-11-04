@@ -1,3 +1,4 @@
+using ArkSurvival.AI.Perception;
 using ArkSurvival.Data;
 using UnityEngine;
 using UnityEngine.AI;
@@ -29,6 +30,7 @@ namespace ArkSurvival.AI.Creatures
         private CreatureTargetMemory _memory;
         private CreatureVision _vision;
         private CreaturePerception _perception;
+        private CreatureHearing _hearing;
         private CreatureHome _home;
         private CreatureStateMachine _stateMachine;
         private Transform _eyeTransform;
@@ -41,6 +43,7 @@ namespace ArkSurvival.AI.Creatures
         public CreatureTargetMemory Memory => _memory;
         public CreatureVision Vision => _vision;
         public CreaturePerception Perception => _perception;
+        public CreatureHearing Hearing => _hearing;
         public CreatureHome Home => _home;
         public Transform Target => _target;
         public CreatureStateMachine StateMachine => _stateMachine;
@@ -91,6 +94,7 @@ namespace ArkSurvival.AI.Creatures
             _eyeTransform = ResolveEyePoint();
             _vision = new CreatureVision(_eyeTransform, _config);
             _perception = new CreaturePerception(_target, _vision, _config.PerceptionInterval);
+            _hearing = new CreatureHearing(transform, _config);
 
             if (_vision.ObstacleLayerMask == 0)
             {
@@ -108,16 +112,45 @@ namespace ArkSurvival.AI.Creatures
             }
 
             _stateMachine = new CreatureStateMachine(
-                new CreatureContext(_navigator, _memory, _vision, _perception, _config, _home));
+                new CreatureContext(_navigator, _memory, _vision, _perception, _hearing, _config, _home));
+
+            // Подписка симметрична отписке в OnDisable: статическое событие живёт всё время игры.
+            NoiseBroadcaster.Emitted += OnNoiseEmitted;
+
             _stateMachine.Start();
 
             if (_target != null)
             {
                 Debug.Log(
                     $"CreatureController: существо готово. Цель «{_target.name}», зрение {_config.SightDistance} м / " +
-                    $"{_config.SightAngle}°, тик восприятия {_config.PerceptionInterval} с, память {_config.MemoryDuration} с.",
+                    $"{_config.SightAngle}°, слух {_config.HearingRange} м, тик восприятия {_config.PerceptionInterval} с, " +
+                    $"память {_config.MemoryDuration} с.",
                     this);
             }
+        }
+
+        private void OnDisable()
+        {
+            NoiseBroadcaster.Emitted -= OnNoiseEmitted;
+        }
+
+        /// <summary>
+        /// Приём шума: слышимость считает <see cref="CreatureHearing"/>. Здесь только подписка
+        /// на глобальное событие и лог; переход в Investigate выполняет
+        /// <see cref="CreatureStateMachine.ApplyNoise"/> в Update (DINO-021).
+        /// </summary>
+        private void OnNoiseEmitted(NoiseEvent noise)
+        {
+            if (_hearing == null || !_hearing.Hear(noise))
+            {
+                return;
+            }
+
+            Debug.Log(
+                $"CreatureController: услышал шум от «{noise.SourceName}» в {noise.Position}, " +
+                $"громкость {noise.Loudness:F2}, дистанция {_hearing.LastDistance:F1} м из " +
+                $"{_hearing.EffectiveRange(noise.Loudness):F1} м.",
+                this);
         }
 
         /// <summary>Команда вернуться к исходной точке. Реакция на события (страх, хп и т.п.) — отдельная задача.</summary>
@@ -179,6 +212,10 @@ namespace ArkSurvival.AI.Creatures
 
             LogPerceptionChanges();
             _stateMachine.ApplyPerception();
+
+            // Шум обрабатывается после зрения: видимая цель имеет приоритет, а услышанный шум
+            // даёт лишь приблизительную точку для Investigate (DINO-021).
+            _stateMachine.ApplyNoise();
 
             _stateMachine.Tick(deltaTime);
 
