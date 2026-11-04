@@ -1,19 +1,28 @@
+using ArkSurvival.Data;
 using UnityEngine;
 
 namespace ArkSurvival.AI.Creatures.CreatureStates
 {
     /// <summary>
-    /// Осмотр: существо идёт к последней известной позиции цели, пока цель не видна.
-    /// Переходы задаёт машина состояний по восприятию; это состояние только исполняет маршрут.
-    /// Первая версия идёт один раз к точке из памяти и не перестраивает путь каждый кадр —
-    /// полноценный поиск вокруг точки и завершение по таймеру относятся к DINO-013/DINO-014.
+    /// Осмотр: существо идёт к позиции, где цель была замечена (позже — услышана).
+    /// Точка берётся из памяти и не «подглядывает» за невидимой целью: память обновляет только
+    /// реально видимая цель (это делает <see cref="ChaseState"/>).
+    /// Осмотр завершается по прибытии к точке или по истечении <c>CreatureConfig.InvestigateDuration</c>,
+    /// после чего состояние сообщает машине, что память отработана, и уходит в Idle.
+    /// Поиск вокруг точки (DINO-014) и возврат домой (DINO-015) — следующие задачи.
     /// </summary>
     public sealed class InvestigateState : CreatureState
     {
         private const float PointSampleRadius = 1f;
 
+        [Tooltip("Насколько должна сдвинуться последняя известная позиция, чтобы путь перестроился, м (временное).")]
+        private const float MinRepathDistance = 0.5f;
+
+        private const float DefaultDuration = 8f;
+
         private bool _destinationAssigned;
-        private Transform _trackedTarget;
+        private bool _failed;
+        private float _elapsedTime;
         private Vector3 _destination;
 
         public InvestigateState(CreatureStateMachine machine) : base(machine)
@@ -23,29 +32,37 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
         public override void Enter()
         {
             _destinationAssigned = false;
-            _trackedTarget = null;
+            _failed = false;
+            _elapsedTime = 0f;
 
             CreatureNavigator navigator = Machine.Context.Navigator;
             if (!navigator.IsReady)
             {
                 Debug.LogWarning("InvestigateState: NavMeshAgent не готов — осмотр невозможен.", navigator.Agent);
+                _failed = true;
                 return;
             }
 
             navigator.ResetToSpeed();
-            MoveTo(Machine.Context.Memory.LastKnownPosition);
+            Vector3 lastKnown = Machine.Context.Memory.LastKnownPosition;
+            Debug.Log(
+                $"InvestigateState: иду к последней известной позиции {lastKnown}, " +
+                $"лимит осмотра {GetDuration():F1} с.",
+                navigator.Agent);
+
+            UpdateDestination();
         }
 
         public override void Exit()
         {
             _destinationAssigned = false;
-            _trackedTarget = null;
+            _failed = false;
+            _elapsedTime = 0f;
         }
 
         public override void Tick(float deltaTime)
         {
-            // Percepion уже переключил состояние (увидел цель → Chase, память истекла → Idle);
-            // маршрут назначать не нужно, чтобы не перезаписать путь нового состояния.
+            // Машина могла переключить состояние в тике восприятия — маршрут нового состояния не трогаем.
             if (Machine.Current != this)
             {
                 return;
@@ -60,23 +77,30 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
                 return;
             }
 
-            // Пока цель в поле зрения, точку из памяти не используем: погоню ведёт Chase.
-            if (context.Perception.TargetVisible)
+            if (_failed)
             {
+                Debug.LogWarning(
+                    "InvestigateState: маршрут не назначен — осмотр завершён.",
+                    context.Navigator.Agent);
+                Finish();
                 return;
             }
 
-            // Цель отходит во время осмотра: позицию памяти двигаю я, переход в состояние решает машина.
-            if (context.Perception.Target != null)
+            _elapsedTime += Mathf.Max(0f, deltaTime);
+            if (_elapsedTime >= GetDuration())
             {
-                context.Memory.UpdatePosition(context.Perception.Target, context.Perception.Target.position);
+                Debug.Log(
+                    $"InvestigateState: лимит осмотра {GetDuration():F1} с истёк — осмотр завершён.",
+                    context.Navigator.Agent);
+                Finish();
+                return;
             }
 
             Vector3 lastKnown = context.Memory.LastKnownPosition;
-            if (Vector3.Distance(lastKnown, _destination) > context.Navigator.Agent.stoppingDistance)
+            if (ShouldRepath(lastKnown))
             {
-                _trackedTarget = context.Memory.Target;
-                MoveTo(lastKnown);
+                UpdateDestination();
+                return;
             }
 
             if (!_destinationAssigned)
@@ -89,7 +113,7 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
                 Debug.Log(
                     $"InvestigateState: прибыл к последней известной позиции {lastKnown} — осмотр завершён.",
                     context.Navigator.Agent);
-                Machine.ChangeState(Machine.Idle);
+                Finish();
                 return;
             }
 
@@ -98,15 +122,36 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
                 Debug.LogWarning(
                     $"InvestigateState: путь к последней известной позиции {lastKnown} не активен — осмотр завершён.",
                     context.Navigator.Agent);
-                Machine.ChangeState(Machine.Idle);
+                Finish();
             }
         }
 
-        private void MoveTo(Vector3 position)
+        /// <summary>
+        /// Осмотр закончен: помечаем память отработанной, чтобы <see cref="CreatureStateMachine.ApplyPerception"/>
+        /// не запускал осмотр заново на той же живой памяти (иначе прибытие каждый кадр давало бы новый Enter).
+        /// </summary>
+        private void Finish()
+        {
+            Machine.NotifyInvestigationFinished();
+            Machine.ChangeState(Machine.Idle);
+        }
+
+        /// <summary>Последняя известная позиция ушла от текущей точки назначения — путь надо перестроить.</summary>
+        private bool ShouldRepath(Vector3 lastKnown)
+        {
+            float threshold = Mathf.Max(MinRepathDistance, Machine.Context.Navigator.Agent.stoppingDistance);
+            Vector3 offset = lastKnown - _destination;
+            offset.y = 0f;
+            return offset.sqrMagnitude > threshold * threshold;
+        }
+
+        private void UpdateDestination()
         {
             CreatureNavigator navigator = Machine.Context.Navigator;
+            Vector3 position = Machine.Context.Memory.LastKnownPosition;
             _destination = position;
             _destinationAssigned = navigator.TrySetDestination(position, false, PointSampleRadius);
+            _failed = !_destinationAssigned;
 
             if (!_destinationAssigned)
             {
@@ -114,6 +159,12 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
                     $"InvestigateState: не удалось назначить путь к последней известной позиции {position}.",
                     navigator.Agent);
             }
+        }
+
+        private float GetDuration()
+        {
+            CreatureConfig config = Machine.Context.Config;
+            return config != null ? Mathf.Max(0f, config.InvestigateDuration) : DefaultDuration;
         }
     }
 }

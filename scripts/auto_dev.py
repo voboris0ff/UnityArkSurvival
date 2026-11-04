@@ -11,11 +11,19 @@ Selection rules (must match docs/roadmap.md):
   - `[x]` done — skipped
   - `[!]` waiting for the user — skipped, does not stop the run
 The orchestrator trusts the roadmap status written by the agent.
+
+Token budget rules:
+  - AGENTS.md is loaded by OpenCode itself; it is NOT passed again via --file.
+  - docs/roadmap.md, progress.md, manual-queue.md, project-context.md are read by
+    the agent on demand, not attached on every run.
+  - Only the single task line and its stage title are sent with the prompt.
+  - The agent `autodev` (opencode.json) pins steps, model and permissions.
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import re
 import subprocess
 import sys
@@ -25,30 +33,44 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ROADMAP = ROOT / "docs" / "roadmap.md"
+CONFIG = ROOT / "auto-dev.yaml"
 LOG_DIR = ROOT / "docs" / "session-logs"
-CONTEXT_FILES = [
+AGENT = "autodev"
+DEFAULT_MODEL = "a6api/deepseek-v4.1-flash-1017#low"
+# Files the prompt refers to. They must exist, but are not attached to the request.
+REQUIRED_FILES = [
     "AGENTS.md",
     "docs/project-context.md",
     "docs/progress.md",
     "docs/roadmap.md",
     "docs/manual-queue.md",
 ]
+STAGE_RE = re.compile(r"^##\s+(?P<title>.+)$")
 TASK_RE = re.compile(
     r"^\s*-\s*\[(?P<status>[ x!])\]\s+.*?\*\*(?P<id>[A-Z]+-\d+)\*\*"
 )
 
 
 def parse_tasks(text: str) -> list[dict[str, str]]:
+    """Return pending tasks with their stage title (to avoid reading the whole roadmap)."""
     tasks = []
+    stage = ""
 
     for line_number, line in enumerate(text.splitlines()):
+        stage_match = STAGE_RE.match(line)
+
+        if stage_match:
+            stage = stage_match.group("title").strip()
+            continue
+
         match = TASK_RE.match(line)
 
         if match and match.group("status") == " ":
             tasks.append({
                 "id": match.group("id"),
+                "stage": stage,
                 "line_number": str(line_number),
-                "line": line,
+                "line": line.strip(),
             })
 
     return tasks
@@ -69,57 +91,83 @@ def _task_status(task_id: str) -> str:
     return ""
 
 def build_prompt(task: dict[str, str]) -> str:
-    return f"""Выполни ровно одну задачу roadmap: {task['id']}.
+    """Short prompt: the rules live in AGENTS.md, which OpenCode loads automatically."""
+    return f"""Выполни ровно одну задачу roadmap {task['id']} (этап: {task['stage']}).
 
-Правила:
-- Найди точную задачу {task['id']} в docs/roadmap.md и выполняй только её.
-- Прочитай AGENTS.md и переданные файлы контекста.
-- Не выполняй сборку, тесты, Unity Editor, сложные проверки, git commit/push.
-- Не редактируй Unity Assets и запрещённые типы файлов (чтение для анализа разрешено).
-- Не начинай соседние задачи.
-- Не задавай вопросы в чате: единственный канал общения — docs/manual-queue.md с блоком `Ответ пользователя:`.
-- Сначала разбери существующие `Ответ пользователя:` в docs/manual-queue.md: если ответ достаточен — удали пункт и обнови статусы; если нет — допиши блок `Вопрос агенту:` и пометь задачу `[!]` в roadmap.
-- Если не хватает имени (Animator-параметр, слой, поле) — придумай его сам, занеси в «Соглашения об именах» в docs/project-context.md и добавь ручной шаг в docs/manual-queue.md. Это не блокирует задачу.
-- Соблюдай лимиты объёма: docs/progress.md 40–60 строк, лог сессии не больше ~20 строк.
-- Обнови docs/roadmap.md, docs/progress.md и docs/manual-queue.md.
-- Создай краткий лог в docs/session-logs/ с ID задачи, изменёнными файлами, результатом и ручными действиями.
-- Не переписывай большие документы целиком без необходимости.
-- Не делай широкого аудита проекта. Изучи только файлы, необходимые для этой задачи.
-- Меняй [ ] на [x] только после полного выполнения задачи.
-- Если для задачи физически не хватает решения пользователя, поставь [!] и всё равно добавь пункт в docs/manual-queue.md.
-- Не изменяй статусы других задач.
+Строка задачи в docs/roadmap.md:
+{task['line']}
 
-В конце выведи:
-TASK_RESULT: DONE / BLOCKED / FAILED
-TASK_SCORE: число от 0 до 100
+Следуй правилам AGENTS.md. Прочитай AGENTS.md, затем только нужные для задачи файлы
+(docs/manual-queue.md разбери первым, docs/roadmap.md — только строка этой задачи,
+docs/progress.md и docs/project-context.md — по необходимости). Без широкого аудита проекта,
+без сборки, тестов, Unity Editor, git commit/push, без правки Unity-ассетов.
+Не начинай соседние задачи и не меняй статусы других задач.
+Каждый новый ручной шаг — пункт в docs/manual-queue.md с пустым блоком `Ответ пользователя:`.
 
-TASK_SCORE должен быть последней строкой ответа.
+В конце ответа — одна строка, ровно в таком виде:
+TASK_RESULT: DONE
 """
 
 
-def run_task(task: dict[str, str], timeout: int) -> tuple[bool, str]:
-    prompt = build_prompt(task)
+def load_settings() -> dict[str, object]:
+    """Read scripts settings from auto-dev.yaml without an extra dependency."""
+    settings: dict[str, object] = {
+        "tasks_per_run": 5,
+        "timeout": 1200,
+        "max_attempts": 2,
+        "model": DEFAULT_MODEL,
+    }
+    try:
+        text = CONFIG.read_text(encoding="utf-8")
+    except OSError:
+        return settings
 
+    scalars = {
+        "tasks_per_run": ("tasks_per_run", int),
+        "timeout_minutes": ("timeout", lambda value: int(value) * 60),
+        "max_attempts_per_task": ("max_attempts", int),
+        "model": ("model", str),
+    }
+    for key, (target, cast) in scalars.items():
+        match = re.search(rf"^\s*{key}:\s*(\S+)", text, re.MULTILINE)
+        if match:
+            try:
+                settings[target] = cast(match.group(1).strip("\"'"))
+            except ValueError:
+                pass
+
+    return settings
+
+
+def build_command(prompt: str, model: str) -> list[str]:
     opencode = shutil.which("opencode.cmd") or shutil.which("opencode")
 
     if not opencode:
-        return False, "OpenCode CLI не найден. Установи CLI или добавь `opencode` в PATH."
+        return []
 
     command = [
-    opencode,
-    "run",
-    "--model",
-    "a6api/deepseek-v4.1-flash-1017",
-]
-
-    for relative in CONTEXT_FILES:
-        command.extend(["--file", relative])
-
-    command.append(prompt)
+        opencode,
+        "run",
+        "--agent",
+        AGENT,
+        "--model",
+        model,
+        prompt,
+    ]
 
     # Windows не запускает .cmd напрямую через subprocess.
     if os.name == "nt" and opencode.lower().endswith((".cmd", ".bat")):
         command = ["cmd.exe", "/c"] + command
+
+    return command
+
+
+def run_task(task: dict[str, str], timeout: int, model: str) -> tuple[bool, str]:
+    prompt = build_prompt(task)
+    command = build_command(prompt, model)
+
+    if not command:
+        return False, "OpenCode CLI не найден. Установи CLI или добавь `opencode` в PATH."
 
     print(f"\n=== {task['id']} ===", flush=True)
 
@@ -146,34 +194,22 @@ def run_task(task: dict[str, str], timeout: int) -> tuple[bool, str]:
     except FileNotFoundError as exc:
         return False, f"Не удалось запустить OpenCode: {exc}"
 
-    print(output[-4000:], flush=True)
+    print(output[-2000:], flush=True)
 
-    score_matches = re.findall(
-        r"(?m)^TASK_SCORE:\s*(100|[1-9]?\d)\s*$",
-        output
-    )
-
-    score = int(score_matches[-1]) if score_matches else None
-
-    done_marker = "TASK_RESULT: DONE" in output
-
-    success = result.returncode == 0 and done_marker and score is not None
-
-    if score is None:
-        output += "\n[ORCHESTRATOR] Агент не предоставил оценку TASK_SCORE."
+    success = result.returncode == 0 and "TASK_RESULT: DONE" in output
 
     return success, output
 
 
-def save_log(task_id: str, output: str, result: str) -> None:
+def save_log(task_id: str, output: str, result: str, attempt: int) -> None:
     """Краткий лог сессии. Полный вывод OpenCode не сохраняется — он раздувает контекст."""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-    summary = output.rstrip().splitlines()[-15:]
-    excerpt = "\n".join(summary)
+    summary = output.rstrip().splitlines()[-10:]
+    excerpt = "\n".join(summary)[-1500:]
     path = LOG_DIR / f"{stamp}-{task_id}.md"
     path.write_text(
-        f"# Сессия {task_id}\n\n"
+        f"# Сессия {task_id} (попытка {attempt})\n\n"
         f"- Время: {dt.datetime.now().isoformat(timespec='seconds')}\n"
         f"- Результат оркестратора: {result}\n\n"
         f"## Хвост вывода\n\n```text\n{excerpt}\n```\n",
@@ -184,49 +220,93 @@ def save_log(task_id: str, output: str, result: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run roadmap tasks in fresh OpenCode sessions.")
     parser.add_argument("--tasks", default=None, help="Количество задач или all.")
-    parser.add_argument("--timeout", type=int, default=1200, help="Таймаут одной сессии в секундах.")
+    parser.add_argument("--timeout", type=int, default=None, help="Таймаут одной сессии в секундах.")
+    parser.add_argument("--model", default=None, help="Переопределить модель (provider/model#variant).")
+    parser.add_argument("--dry-run", action="store_true", help="Показать команду и промпт, ничего не запускать.")
     args = parser.parse_args()
 
     if not ROADMAP.exists():
         print(f"Не найден {ROADMAP}", file=sys.stderr)
         return 2
-    for relative in CONTEXT_FILES:
+    for relative in REQUIRED_FILES:
         if not (ROOT / relative).exists():
             print(f"Не найден файл контекста: {relative}", file=sys.stderr)
             return 2
 
-    configured_count = 5
-    try:
-        config_text = (ROOT / "auto-dev.yaml").read_text(encoding="utf-8")
-        match = re.search(r"^tasks_per_run:\s*(\d+)", config_text, re.MULTILINE)
-        if match:
-            configured_count = int(match.group(1))
-    except OSError:
-        pass
+    settings = load_settings()
+    timeout = args.timeout or int(settings["timeout"])
+    model = args.model or str(settings["model"])
+    max_attempts = max(1, int(settings["max_attempts"]))
+    configured_count = int(settings["tasks_per_run"])
 
-    limit = None if args.tasks == "all" else int(args.tasks) if args.tasks else configured_count
+    if args.tasks == "all":
+        limit = None
+    else:
+        try:
+            limit = int(args.tasks) if args.tasks else configured_count
+        except ValueError:
+            parser.error("--tasks должен быть числом или all")
+
     if limit is not None and limit < 1:
         parser.error("--tasks должен быть положительным числом или all")
 
-    completed = 0
-    while limit is None or completed < limit:
+    if args.dry_run:
         tasks = parse_tasks(ROADMAP.read_text(encoding="utf-8"))
         if not tasks:
             print("Невыполненных задач не осталось.")
+            return 0
+        command = build_command(build_prompt(tasks[0]), model)
+        print(json.dumps({"command": command, "agent": AGENT, "timeout": timeout,
+                          "max_attempts": max_attempts, "limit": limit},
+                         ensure_ascii=False, indent=2))
+        return 0
+
+    completed = 0
+    skipped: set[str] = set()
+
+    while limit is None or completed < limit:
+        tasks = parse_tasks(ROADMAP.read_text(encoding="utf-8"))
+        # Блокированные и упавшие задачи исключаем, иначе выборка берёт ту же задачу снова.
+        task = next((item for item in tasks if item["id"] not in skipped), None)
+        if task is None:
+            print("Невыполненных задач не осталось.")
             break
 
-        task = tasks[0]
+        roadmap_done = False
 
-        if is_task_done(task["id"]):
-            # Агент мог отметить задачу [x], но упасть до выхода: просто идём дальше.
-            completed += 1
-            continue
+        for attempt in range(1, max_attempts + 1):
+            success, output = run_task(task, timeout, model)
 
-        success, output = run_task(task, args.timeout)
-        roadmap_done = is_task_done(task["id"])
+            if is_task_done(task["id"]):
+                roadmap_done = True
+                save_log(task["id"], output, "DONE", attempt)
+                break
 
-        status = "DONE" if roadmap_done else "NOT_DONE"
-        save_log(task["id"], output, status)
+            # Задача не выполнена: агент мог пометить её как ожидающую пользователя.
+            if is_task_blocked(task["id"]):
+                save_log(task["id"], output, "BLOCKED", attempt)
+                print(
+                    f"[ORCHESTRATOR] {task['id']} ждёт ответа пользователя в docs/manual-queue.md. "
+                    "Продолжаю со следующей задачей."
+                )
+                skipped.add(task["id"])
+                break
+
+            # Транзиентный сбой (сеть, провайдер): задача в roadmap не тронута — повторяем.
+            save_log(task["id"], output, "NOT_DONE", attempt)
+            if not success and attempt < max_attempts:
+                print(
+                    f"[ORCHESTRATOR] {task['id']}: попытка {attempt}/{max_attempts} не удалась, повторяю.",
+                    flush=True,
+                )
+                continue
+
+            print(
+                f"[ORCHESTRATOR] {task['id']} не отмечена выполненной в roadmap. "
+                "Останавливаюсь."
+            )
+            print("Проверь roadmap, manual-queue.md и лог сессии.")
+            return 1
 
         if roadmap_done:
             completed += 1
@@ -234,22 +314,6 @@ def main() -> int:
                 f"[ORCHESTRATOR] {task['id']} подтверждена через roadmap "
                 f"({completed}/{limit or 'all'})."
             )
-            continue
-
-        # Задача не выполнена: допустимо, если агент пометил её как ожидающую пользователя.
-        if is_task_blocked(task["id"]):
-            print(
-                f"[ORCHESTRATOR] {task['id']} ждёт ответа пользователя в docs/manual-queue.md. "
-                "Продолжаю со следующей задачей."
-            )
-            continue
-
-        print(
-            f"[ORCHESTRATOR] {task['id']} не отмечена выполненной в roadmap. "
-            "Останавливаюсь."
-        )
-        print("Проверь roadmap, manual-queue.md и лог сессии.")
-        break
 
     print(f"Готово. Успешно завершено задач: {completed}.")
     return 0

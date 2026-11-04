@@ -1,6 +1,23 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "model": "a6api/deepseek-v4-flash",
+  "tool_output": {
+    "max_lines": 400,
+    "max_bytes": 16384
+  },
+  "agents": {
+    "autodev": {
+      "description": "Automated single roadmap task runner (scripts/auto_dev.py)",
+      "mode": "primary",
+      "steps": 25,
+      "permissions": [
+        { "action": "shell", "resource": "*", "effect": "deny" },
+        { "action": "webfetch", "resource": "*", "effect": "deny" },
+        { "action": "websearch", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "*", "effect": "deny" }
+      ]
+    }
+  },
   "provider": {
     "a6api": {
       "npm": "@ai-sdk/openai-compatible",

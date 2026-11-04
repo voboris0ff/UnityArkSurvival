@@ -6,11 +6,14 @@ namespace ArkSurvival.AI.Creatures
     /// <summary>
     /// Набор состояний поведения существа: Idle, Investigate, Chase и Return.
     /// Переходы по восприятию собраны в одном месте (<see cref="ApplyPerception"/>), а не размазаны по состояниям.
+    /// Осмотр (Investigate) завершается прибытием или таймером и сообщает об этом через
+    /// <see cref="NotifyInvestigationFinished"/>, чтобы та же точка не осматривалась повторно.
     /// </summary>
     public sealed class CreatureStateMachine
     {
         private CreatureState _current;
         private bool _wasPursuing;
+        private bool _investigationSpent;
 
         public CreatureContext Context { get; }
         public IdleState Idle { get; }
@@ -52,6 +55,10 @@ namespace ArkSurvival.AI.Creatures
 
             if (seesTarget)
             {
+                // Новое наблюдение сбрасывает отметку «осмотр уже выполнен»: следующая потеря цели
+                // снова даёт право на осмотр новой точки.
+                _investigationSpent = false;
+
                 bool wasPursuing = _wasPursuing;
                 _wasPursuing = true;
                 if (!wasPursuing)
@@ -65,7 +72,7 @@ namespace ArkSurvival.AI.Creatures
                 return;
             }
 
-            if (remembersTarget)
+            if (remembersTarget && !_investigationSpent)
             {
                 bool wasPursuing = _wasPursuing;
                 _wasPursuing = true;
@@ -80,12 +87,26 @@ namespace ArkSurvival.AI.Creatures
                 return;
             }
 
+            if (remembersTarget)
+            {
+                // Осмотр этой точки уже закончен (прибытие/таймер), память ещё жива:
+                // повторно не идём, иначе прибытие каждый кадр запускало бы Investigate заново.
+                if (_current == Investigate || _current == Chase)
+                {
+                    _wasPursuing = false;
+                    ChangeState(Idle);
+                }
+
+                return;
+            }
+
             if (!_wasPursuing)
             {
                 return;
             }
 
             _wasPursuing = false;
+            _investigationSpent = false;
             Debug.Log(
                 "CreatureStateMachine: память о цели истекла — выход из преследования/осмотра.",
                 Context.Navigator.Agent);
@@ -97,6 +118,39 @@ namespace ArkSurvival.AI.Creatures
             }
         }
 
+        /// <summary>
+        /// Команда осмотра последней известной позиции (например, когда погоня физически невозможна).
+        /// Осмотр имеет смысл только при живой памяти; повторный вызов во время осмотра ничего не меняет.
+        /// </summary>
+        public void RequestInvestigate()
+        {
+            if (_current == Investigate || _current == Return)
+            {
+                return;
+            }
+
+            if (Context.Memory.HasTarget)
+            {
+                _wasPursuing = true;
+                _investigationSpent = false;
+                ChangeState(Investigate);
+                return;
+            }
+
+            _wasPursuing = false;
+            ChangeState(Idle);
+        }
+
+        /// <summary>
+        /// Осмотр завершён (прибытие или таймер). Пока память о той же точке жива, повторно
+        /// осматривать её не нужно: новая потеря цели сбросит отметку.
+        /// </summary>
+        public void NotifyInvestigationFinished()
+        {
+            _investigationSpent = true;
+            _wasPursuing = false;
+        }
+
         /// <summary>Команда вернуться к исходной точке. Повторный вызов во время возврата ничего не меняет.</summary>
         public void RequestReturn()
         {
@@ -105,6 +159,8 @@ namespace ArkSurvival.AI.Creatures
                 return;
             }
 
+            // После возврата не возобновляем осмотр старой точки без нового наблюдения.
+            _investigationSpent = true;
             _wasPursuing = false;
             ChangeState(Return);
         }

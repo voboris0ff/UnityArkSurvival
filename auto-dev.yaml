@@ -1,11 +1,19 @@
-# Настройки Python-оркестратора
+# Настройки Python-оркестратора `scripts/auto_dev.py`
+# Читаются простым регэкспом: ключ: значение, одна пара на строку.
+
 tasks_per_run: 5
 
 session:
+  # Таймаут одной сессии, минуты (переопределяется `--timeout` в секундах).
   timeout_minutes: 20
-  max_attempts_per_task: 1
+  # Повторы только для транзиентных сбоев (сеть/провайдер), задача в roadmap не тронута.
+  max_attempts_per_task: 2
+  # Вариант модели: low / medium / high. Промпт и правила дают больше, чем high.
+  model: a6api/deepseek-v4.1-flash-1017#low
 
 context:
+  # Список для человека: AGENTS.md OpenCode читает сам, остальное агент читает по требованию.
+  # В запрос файлы НЕ прикладываются (иначе тот же текст оплачивается дважды).
   files:
     - AGENTS.md
     - docs/project-context.md

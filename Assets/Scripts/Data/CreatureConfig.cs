@@ -22,6 +22,7 @@ namespace ArkSurvival.Data
 
         [Header("Memory")]
         [SerializeField] private float _memoryDuration = 5f;
+        [SerializeField] private float _investigateDuration = 8f;
         [SerializeField] private float _searchDuration = 6f;
 
         [Header("Attack")]
@@ -43,6 +44,7 @@ namespace ArkSurvival.Data
         public LayerMask ObstacleLayerMask => _obstacleLayerMask;
         public float HearingRange => _hearingRange;
         public float MemoryDuration => _memoryDuration;
+        public float InvestigateDuration => _investigateDuration;
         public float SearchDuration => _searchDuration;
         public float AttackRange => _attackRange;
         public float AttackAngle => _attackAngle;

@@ -24,6 +24,8 @@
 | Восприятие | `PerceptionInterval` | период тика зрения, с; `<= 0` — каждый кадр | `CreatureConfig`, `CreaturePerception` |
 | Память | `Tick(dt)` | вызывается каждый кадр; давность (`TimeSinceLastSeen`) считается накоплением `dt`, а не `Time.time` | `CreatureTargetMemory`, `CreatureController.Update` |
 | FSM | `ApplyPerception()` | единственная точка переходов по зрению/памяти: вижу → `Chase`, не вижу но помню → `Investigate`, память истекла → `Idle` | `CreatureStateMachine`, `CreatureController.Update` |
+| FSM | `RequestInvestigate()` | команда осмотра последней известной точки (используется `Chase` при непостроенном пути) | `CreatureStateMachine` |
+| Погоня | `MinRepathDistance`, `CloseRangeDistance` | 0.5 м и 3 м, временные константы `ChaseState`: порог перестроения пути и дистанция «в упор» | `ChaseState` |
 
 ## Отладочные средства
 - `Assets/CreatureDebuger.cs` — компонент `CreatureDebugInput` (класс назван иначе, чем файл): по клавише `R` вызывает `CreatureController.RequestReturn()`.
@@ -43,6 +45,7 @@
 - `CreatureController` (DINO-004) — композиция, валидация, единственный тик FSM и восприятия; `_homePosition` фиксируется в `Start`.
 - `CreatureStateMachine` + `CreatureContext`, состояния `Idle` (DINO-005), `Return` (DINO-006, проверено в Play Mode), `Investigate` и `Chase` (DINO-011).
 - `CreatureStateMachine.ApplyPerception` (DINO-011) — тик восприятия обновляет память (`Observe` при виде), затем машина переключает `Chase` (вижу) / `Investigate` (не вижу, но помню) / `Idle` (память истекла).
+- `ChaseState` (DINO-012) — погоня с экономным перестроением пути: только по заметному смещению видимой цели и не чаще `DestinationUpdateInterval`; `RequestInvestigate()` в машине.
 - `CreatureAnimator` (DINO-007) — публикует `Speed` из `NavMeshAgent.velocity`.
 - `CreatureTargetMemory` (DINO-008) — хранилище цели: `Observe`, `UpdatePosition`, `Clear`, `HasTarget`/`TimeSinceLastSeen` по `MemoryDuration`; решения не принимает. Доступ через `CreatureContext.Memory`. С DINO-011 давность накапливается `Tick(dt)`, который вызывает `CreatureController.Update`.
 - `CreatureVision` (DINO-009) — проверка зрения: дистанция, угол обзора, raycast до коллайдера цели по `ObstacleLayerMask` (триггеры игнорируются). Возвращает точку реальной видимости; память не трогает. Доступ через `CreatureContext.Vision`.
