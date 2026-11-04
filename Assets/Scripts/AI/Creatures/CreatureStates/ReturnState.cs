@@ -4,22 +4,22 @@ using UnityEngine.AI;
 namespace ArkSurvival.AI.Creatures.CreatureStates
 {
     /// <summary>
-    /// Возврат к исходной точке существа. Сначала проверяет достижимость точки, затем один раз
-    /// назначает destination; при прибытии возвращается в Idle.
+    /// Возврат к текущей домашней точке существа. Точка читается из <see cref="CreatureContext.HomePosition"/>
+    /// при входе в состояние, поэтому учитывает смену дома командой SetHome. Сначала проверяет достижимость точки,
+    /// затем один раз назначает destination; при прибытии возвращается в Idle.
     /// </summary>
     public sealed class ReturnState : CreatureState
     {
         private const float SampleRadius = 2f;
 
         private readonly NavMeshAgent _agent;
-        private readonly Vector3 _homePosition;
+        private Vector3 _homePosition;
         private bool _destinationAssigned;
         private bool _failed;
 
-        public ReturnState(CreatureStateMachine machine, NavMeshAgent agent, Vector3 homePosition) : base(machine)
+        public ReturnState(CreatureStateMachine machine, NavMeshAgent agent) : base(machine)
         {
             _agent = agent;
-            _homePosition = homePosition;
         }
 
         public Vector3 HomePosition => _homePosition;
@@ -28,6 +28,7 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
         {
             _destinationAssigned = false;
             _failed = false;
+            _homePosition = Machine.Context.HomePosition;
 
             CreatureNavigator navigator = Machine.Context.Navigator;
             if (!navigator.IsValid || !navigator.CanReach(_homePosition, SampleRadius))

@@ -15,6 +15,8 @@ namespace ArkSurvival.AI.Creatures
 
         [SerializeField] private CreatureConfig _config;
         [SerializeField] private NavMeshAgent _agent;
+
+        [Tooltip("Начальная домашняя точка. Пусто — стартовая позиция существа. Дальше точка меняется командой SetHome.")]
         [SerializeField] private Transform _homePoint;
 
         [Tooltip("Точка глаз для проверки зрения. Пусто — берётся позиция существа + CreatureConfig.EyeHeight.")]
@@ -27,8 +29,8 @@ namespace ArkSurvival.AI.Creatures
         private CreatureTargetMemory _memory;
         private CreatureVision _vision;
         private CreaturePerception _perception;
+        private CreatureHome _home;
         private CreatureStateMachine _stateMachine;
-        private Vector3 _homePosition;
         private Transform _eyeTransform;
         private bool _wasTargetVisible;
         private bool _wasTargetRemembered;
@@ -39,10 +41,11 @@ namespace ArkSurvival.AI.Creatures
         public CreatureTargetMemory Memory => _memory;
         public CreatureVision Vision => _vision;
         public CreaturePerception Perception => _perception;
+        public CreatureHome Home => _home;
         public Transform Target => _target;
         public CreatureStateMachine StateMachine => _stateMachine;
         public Transform HomePoint => _homePoint;
-        public Vector3 HomePosition => _homePosition;
+        public Vector3 HomePosition => _home != null ? _home.Position : _homePoint != null ? _homePoint.position : transform.position;
         public bool IsInitialized => _navigator != null && _navigator.IsValid;
 
         private void Awake()
@@ -51,18 +54,10 @@ namespace ArkSurvival.AI.Creatures
             {
                 _agent = GetComponent<NavMeshAgent>();
             }
-
-            if (_homePoint == null)
-            {
-                _homePoint = transform;
-            }
         }
 
         private void Start()
         {
-            // Позиция дома фиксируется при старте: иначе без _homePoint она едет вместе с существом.
-            _homePosition = _homePoint.position;
-
             if (!ValidateReferences())
             {
                 return;
@@ -85,8 +80,13 @@ namespace ArkSurvival.AI.Creatures
             }
 
             _navigator = new CreatureNavigator(_agent);
-            _navigator.Initialize(_config.ArrivalDistance, _config.MoveSpeed);
+            _navigator.Initialize(_config.ArrivalDistance, _config.MoveSpeed, _config.TurnSpeed);
             _memory = new CreatureTargetMemory(_config.MemoryDuration);
+
+            // Домашняя точка инициализируется один раз от стартовой позиции (или назначенного Home Point)
+            // и дальше меняется только командой SetHome — она не следует за существом.
+            _home = new CreatureHome(_agent);
+            _home.Initialize(_homePoint != null ? _homePoint.position : transform.position);
 
             _eyeTransform = ResolveEyePoint();
             _vision = new CreatureVision(_eyeTransform, _config);
@@ -108,7 +108,7 @@ namespace ArkSurvival.AI.Creatures
             }
 
             _stateMachine = new CreatureStateMachine(
-                new CreatureContext(_navigator, _memory, _vision, _perception, _config, HomePosition));
+                new CreatureContext(_navigator, _memory, _vision, _perception, _config, _home));
             _stateMachine.Start();
 
             if (_target != null)
@@ -144,6 +144,24 @@ namespace ArkSurvival.AI.Creatures
             Debug.Log($"CreatureController: новое состояние {_stateMachine.CurrentName}.", this);
         }
 
+        /// <summary>
+        /// Меняет домашнюю точку существа с привязкой к NavMesh. По ходу погони точку переносит
+        /// <see cref="CreatureStates.SearchState"/> при неудачном завершении поиска (DINO-016);
+        /// активный патруль замечает смену точки и выбирает новые маршруты вокруг неё (DINO-018).
+        /// </summary>
+        public bool SetHome(Vector3 position)
+        {
+            if (_home == null)
+            {
+                Debug.LogWarning(
+                    "CreatureController: SetHome вызван до инициализации (Start не завершён) — команда проигнорирована.",
+                    this);
+                return false;
+            }
+
+            return _home.SetHome(position);
+        }
+
         private void Update()
         {
             if (_stateMachine == null)
@@ -163,6 +181,10 @@ namespace ArkSurvival.AI.Creatures
             _stateMachine.ApplyPerception();
 
             _stateMachine.Tick(deltaTime);
+
+            // Поворот — единственная точка управления вращением: NavMeshAgent только прокладывает путь,
+            // а угловую скорость ограничивает CreatureConfig.TurnSpeed.
+            _navigator.TickRotation(deltaTime);
         }
 
         /// <summary>

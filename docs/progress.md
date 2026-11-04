@@ -5,7 +5,7 @@
 ## Статус
 - Unity 6 / URP. Движение игрока готово полностью.
 - Текущий этап: первое существо — наземный динозавр-хищник.
-- Выполнено: DINO-001 … DINO-013. Следующая задача — **DINO-014** (`Search`).
+- Выполнено: DINO-001 … DINO-019. Следующая задача — **DINO-020** (приём шума и дальность).
 
 ## Игрок
 - `CharacterController` + новый Input System; FSM Idle/Walk/Sprint/Jump/Fall/Roll.
@@ -28,11 +28,20 @@
 | DINO-011 | `ApplyPerception`, `InvestigateState`, `ChaseState` | зрение → память → Idle/Investigate/Chase; проверено в Play Mode |
 | DINO-012 | `ChaseState` (доводка) | путь только по заметному смещению цели и не чаще интервала |
 | DINO-013 | `InvestigateState` (доводка) | осмотр точки до прибытия или `InvestigateDuration`, без повторного осмотра той же точки |
+| DINO-015 | `SearchState` | случайные точки вокруг последней известной позиции, паузы, лимит `SearchDuration` |
+| DINO-016 | завершение неудачного поиска | `SetHome` на месте окончания погони, `Memory.Clear()`, Idle |
+| DINO-017 | `CreaturePatrolPointSelector` | параметры `Patrol*` в конфиге, выбор достижимой точки вокруг дома |
+| DINO-018 | `PatrolState` | Idle → Patrol, точки вокруг дома, паузы, сброс маршрута при смене дома |
+| DINO-019 | `NoiseEvent`, `NoiseBroadcaster` | контракт шума: позиция, громкость 0..1, источник; слушателей нет |
 
 - Порядок кадра в `CreatureController.Update`: `Perception.Tick` → `Memory.Tick` → лог изменений → `ApplyPerception` (переходы) → `StateMachine.Tick`.
-- Правила переходов (`ApplyPerception`): вижу цель → `Chase`; не вижу при живой памяти и ещё не отработанном осмотре → `Investigate` (идёт к `LastKnownPosition`); память истекла → `Idle`. `Return` по-прежнему только по клавише `R`. `Observe` памяти выполняет `Chase` при видимой цели; `RequestInvestigate()` — команда осмотра из `Chase` при непостроенном пути.
-- `Investigate` (DINO-013): идёт к `LastKnownPosition` на `MoveSpeed`, путь перестраивается только при заметном сдвиге точки; завершается прибытием (`HasArrived`), истечением `CreatureConfig.InvestigateDuration` (по умолчанию 8 с) или непостроенным/потерянным путём. По завершении вызывает `NotifyInvestigationFinished()` — та же живая память больше не запускает осмотр, пока цель снова не будет видна.
-- `Chase` (DINO-012): идёт на `ChaseSpeed`, перестраивает путь только когда цель видна и сдвинулась дальше `MinRepathDistance` (и не чаще `DestinationUpdateInterval`), вблизи (< 3 м) точка назначения — на агенте; осмотр вокруг точки — DINO-014.
+- Правила переходов (`ApplyPerception`): вижу цель → `Chase`; не вижу при живой памяти и ещё не отработанном осмотре → `Investigate` (идёт к `LastKnownPosition`); осмотр отработан при живой памяти → `Search` не прерывается; память истекла → `Investigate`→`Search`, `Chase`→`Idle`. `Return` по-прежнему только по клавише `R`. `Observe` памяти выполняет `Chase` при видимой цели; `RequestInvestigate()` — команда осмотра из `Chase` при непостроенном пути.
+- `Investigate` (DINO-013): идёт к `LastKnownPosition` на `MoveSpeed`, путь перестраивается только при заметном сдвиге точки; завершается прибытием (`HasArrived`), истечением `CreatureConfig.InvestigateDuration` (по умолчанию 8 с) или непостроенным/потерянным путём. По завершении вызывает `NotifyInvestigationFinished()` и переходит в `Search`: та же живая память больше не запускает осмотр, пока цель снова не будет видна.
+- `Search` (DINO-015): центр поиска — `Memory.LastKnownPosition` на входе (не едет за существом); случайные достижимые точки в `SearchRadius` (по умолчанию 8 м, временное), пауза `SearchStopDuration` (1 с) на каждой, лимит `SearchDuration` (6 с). Восприятие не читает: в Chase переключает только `ApplyPerception`.
+- `Search` завершение (DINO-016): по истечении `SearchDuration` без обнаружения цели — `Home.SetHome(Navigator.Position)` (место, где существо прекратило погоню), `Memory.Clear()`, `NotifySearchFinished()`, `Patrol` (DINO-018). Отдельного `Return` нет; `R` остаётся отладочной командой.
+- `Patrol` (DINO-018): Idle без цели сразу ведёт в Patrol (если агент готов); скорость `PatrolSpeed`, точки из `CreaturePatrolPointSelector` вокруг `HomePosition`, по прибытии с шансом `PatrolWaitChance` пауза `Random.Range(PatrolWaitMin, PatrolWaitMax)`, нет точки — повтор через 0.5 с, смена дома > 0.05 м сбрасывает маршрут. Переходы по зрению — только `ApplyPerception`.
+- `ApplyPerception` при истёкшей памяти: `Investigate` → `Search`, `Chase` → Idle; во время `Search` с живой памятью состояние не прерывается.
+- `Chase` (DINO-012): идёт на `ChaseSpeed`, перестраивает путь только когда цель видна и сдвинулась дальше `MinRepathDistance` (и не чаще `DestinationUpdateInterval`), вблизи (< 3 м) точка назначения — на агенте; поиск вокруг точки — DINO-015.
 - Debug.Log: старт, каждое изменение «вижу/не вижу», «цель запомнена/память истекла», раз в секунду при невидимой, но живой памяти, каждый переход состояния.
 - `CreatureTargetMemory`: `Observe(target, position)` обнуляет давность, `UpdatePosition` двигает позицию без сброса давности, `Clear` забывает всё; `HasTarget` = давность ≤ `MemoryDuration`.
 - Ссылки вида `Target` могут стать `null` при уничтожении цели — `CreatureVision` и `ChaseState` это учитывают.
@@ -50,9 +59,10 @@
 - Слои: 3 `Creature`, 6 `Player`, 7 `Obstacle` (так в `TagManager.asset`).
 
 ## Ближайшие шаги
-1. DINO-014: `Search` — ограниченный по времени поиск вокруг последней известной позиции.
-2. Пользователь: проверить в Play Mode осмотр (пункт DINO-013 в очереди).
+1. DINO-020: приём шума существом (`CreatureHearing`) и расчёт эффективной дальности по `Loudness` и `HearingRange`; подписка на `NoiseBroadcaster.Emitted` с отпиской в `OnDisable`.
+2. Пользователь: проверить патруль в Play Mode (DINO-018) — шаги, паузы, смену дома после неудачного поиска.
 3. Пользователь: проверить анимации движения (DINO-007) и подобрать `PerceptionInterval` (DINO-010).
+4. Пользователь: подобрать `PatrolRadius`/`PatrolSpeed`/паузы (DINO-017, значения подтверждены как стартовые).
 
 ## Ограничения
 - Агент не правит Unity-ассеты, не запускает сборку/тесты.

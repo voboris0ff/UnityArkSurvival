@@ -5,7 +5,7 @@ namespace ArkSurvival.AI.Creatures
 {
     /// <summary>
     /// Контейнер зависимостей существа, передаваемый в состояния.
-    /// Содержит навигационный адаптер, исходную точку, память о цели, зрение, тик восприятия и конфиг;
+    /// Содержит навигационный адаптер, домашнюю точку, память о цели, зрение, тик восприятия и конфиг;
     /// остальные компоненты добавятся по мере задач.
     /// </summary>
     public sealed class CreatureContext
@@ -15,7 +15,13 @@ namespace ArkSurvival.AI.Creatures
         public CreatureVision Vision { get; }
         public CreaturePerception Perception { get; }
         public CreatureConfig Config { get; }
-        public Vector3 HomePosition { get; }
+        public CreatureHome Home { get; }
+
+        /// <summary>Выбор случайной достижимой точки патруля вокруг домашней точки (DINO-017).</summary>
+        public CreaturePatrolPointSelector PatrolPoints { get; }
+
+        /// <summary>Текущая домашняя точка. Читается из <see cref="Home"/>, поэтому смена точки видна всем состояниям.</summary>
+        public Vector3 HomePosition => Home != null ? Home.Position : Navigator != null ? Navigator.Position : Vector3.zero;
 
         public CreatureContext(
             CreatureNavigator navigator,
@@ -23,14 +29,15 @@ namespace ArkSurvival.AI.Creatures
             CreatureVision vision,
             CreaturePerception perception,
             CreatureConfig config,
-            Vector3 homePosition)
+            CreatureHome home)
         {
             Navigator = navigator;
             Memory = memory;
             Vision = vision;
             Perception = perception;
             Config = config;
-            HomePosition = homePosition;
+            Home = home;
+            PatrolPoints = new CreaturePatrolPointSelector(this);
         }
     }
 }

@@ -8,8 +8,8 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
     /// Точка берётся из памяти и не «подглядывает» за невидимой целью: память обновляет только
     /// реально видимая цель (это делает <see cref="ChaseState"/>).
     /// Осмотр завершается по прибытии к точке или по истечении <c>CreatureConfig.InvestigateDuration</c>,
-    /// после чего состояние сообщает машине, что память отработана, и уходит в Idle.
-    /// Поиск вокруг точки (DINO-014) и возврат домой (DINO-015) — следующие задачи.
+    /// после чего состояние сообщает машине, что память отработана, и уходит в <see cref="SearchState"/>.
+    /// Возврат домой после поиска — DINO-016.
     /// </summary>
     public sealed class InvestigateState : CreatureState
     {
@@ -73,7 +73,7 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
             if (!context.Memory.HasTarget)
             {
                 Debug.Log("InvestigateState: память о цели истекла — осмотр завершён.", context.Navigator.Agent);
-                Machine.ChangeState(Machine.Idle);
+                Finish();
                 return;
             }
 
@@ -128,12 +128,13 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
 
         /// <summary>
         /// Осмотр закончен: помечаем память отработанной, чтобы <see cref="CreatureStateMachine.ApplyPerception"/>
-        /// не запускал осмотр заново на той же живой памяти (иначе прибытие каждый кадр давало бы новый Enter).
+        /// не запускал осмотр заново на той же живой памяти (иначе прибытие каждый кадр давало бы новый Enter),
+        /// и переходим к поиску вокруг последней известной позиции.
         /// </summary>
         private void Finish()
         {
             Machine.NotifyInvestigationFinished();
-            Machine.ChangeState(Machine.Idle);
+            Machine.ChangeState(Machine.Search);
         }
 
         /// <summary>Последняя известная позиция ушла от текущей точки назначения — путь надо перестроить.</summary>

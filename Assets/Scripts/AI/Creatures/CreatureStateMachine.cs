@@ -4,10 +4,12 @@ using UnityEngine;
 namespace ArkSurvival.AI.Creatures
 {
     /// <summary>
-    /// Набор состояний поведения существа: Idle, Investigate, Chase и Return.
+    /// Набор состояний поведения существа: Idle, Patrol, Investigate, Search, Chase и Return.
     /// Переходы по восприятию собраны в одном месте (<see cref="ApplyPerception"/>), а не размазаны по состояниям.
+    /// Idle без цели ведёт в <see cref="Patrol"/>: существо ходит вокруг текущей домашней точки.
     /// Осмотр (Investigate) завершается прибытием или таймером и сообщает об этом через
-    /// <see cref="NotifyInvestigationFinished"/>, чтобы та же точка не осматривалась повторно.
+    /// <see cref="NotifyInvestigationFinished"/>: та же точка больше не осматривается, но существо
+    /// переходит в <see cref="Search"/> — ограниченный по времени поиск вокруг последней известной позиции.
     /// </summary>
     public sealed class CreatureStateMachine
     {
@@ -17,7 +19,9 @@ namespace ArkSurvival.AI.Creatures
 
         public CreatureContext Context { get; }
         public IdleState Idle { get; }
+        public PatrolState Patrol { get; }
         public InvestigateState Investigate { get; }
+        public SearchState Search { get; }
         public ChaseState Chase { get; }
         public ReturnState Return { get; }
 
@@ -28,9 +32,11 @@ namespace ArkSurvival.AI.Creatures
         {
             Context = context;
             Idle = new IdleState(this);
+            Patrol = new PatrolState(this);
             Investigate = new InvestigateState(this);
+            Search = new SearchState(this);
             Chase = new ChaseState(this);
-            Return = new ReturnState(this, context.Navigator.Agent, context.HomePosition);
+            Return = new ReturnState(this, context.Navigator.Agent);
         }
 
         public void Start()
@@ -91,6 +97,7 @@ namespace ArkSurvival.AI.Creatures
             {
                 // Осмотр этой точки уже закончен (прибытие/таймер), память ещё жива:
                 // повторно не идём, иначе прибытие каждый кадр запускало бы Investigate заново.
+                // Поиск вокруг точки (Search) при этом продолжается — его не прерываем.
                 if (_current == Investigate || _current == Chase)
                 {
                     _wasPursuing = false;
@@ -106,13 +113,23 @@ namespace ArkSurvival.AI.Creatures
             }
 
             _wasPursuing = false;
-            _investigationSpent = false;
+            _investigationSpent = true;
             Debug.Log(
                 "CreatureStateMachine: память о цели истекла — выход из преследования/осмотра.",
                 Context.Navigator.Agent);
 
-            // Возврат домой по-прежнему только по команде (клавиша R): поведение после осмотра — DINO-015.
-            if (_current == Investigate || _current == Chase)
+            // Возврат домой по-прежнему только по команде (клавиша R); после неудачного поиска
+            // домашняя точка уже перенесена на место окончания погони (SearchState), дальше — Idle,
+            // который без цели сразу ведёт в Patrol.
+            // Незаконченный осмотр переходит в Search: последняя известная точка ещё годится
+            // как центр поиска, а Investigate не должен «съедать» поиск из-за короткой памяти.
+            if (_current == Investigate)
+            {
+                ChangeState(Search);
+                return;
+            }
+
+            if (_current == Chase)
             {
                 ChangeState(Idle);
             }
@@ -143,9 +160,20 @@ namespace ArkSurvival.AI.Creatures
 
         /// <summary>
         /// Осмотр завершён (прибытие или таймер). Пока память о той же точке жива, повторно
-        /// осматривать её не нужно: новая потеря цели сбросит отметку.
+        /// осматривать её не нужно: новая потеря цели сбросит отметку. Дальше — поиск (Search).
         /// </summary>
         public void NotifyInvestigationFinished()
+        {
+            _investigationSpent = true;
+            _wasPursuing = false;
+        }
+
+        /// <summary>
+        /// Поиск закончился без обнаружения цели. Смену домашней точки на место окончания погони
+        /// и сброс памяти выполняет <see cref="SearchState"/> перед вызовом. Отметка «осмотр отработан»
+        /// ставится, чтобы живая память не запускала Investigate заново.
+        /// </summary>
+        public void NotifySearchFinished()
         {
             _investigationSpent = true;
             _wasPursuing = false;

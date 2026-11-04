@@ -11,10 +11,23 @@ namespace ArkSurvival.AI.Creatures
     {
         private const float MinPathTolerance = 0.01f;
 
+        /// <summary>Минимальная горизонтальная скорость, при которой существо ещё доворачивается по движению, м/с.</summary>
+        private const float MinRotationSpeed = 0.1f;
+
+        /// <summary>
+        /// Если направление движения расходится с текущим взглядом сильнее этого угла,
+        /// существо сначала разворачивается на месте, а не «скользит» вбок (временное значение).
+        /// </summary>
+        private const float MoveAlignAngle = 60f;
+
         private readonly NavMeshAgent _agent;
         private readonly NavMeshPath _pathProbe = new NavMeshPath();
         private float _arrivalDistance;
         private float _defaultSpeed;
+        private float _turnSpeedDegrees;
+        private float _requestedSpeed;
+        private bool _movementBlocked;
+        private bool _stopRequested;
 
         public CreatureNavigator(NavMeshAgent agent)
         {
@@ -29,7 +42,7 @@ namespace ArkSurvival.AI.Creatures
 
         public bool HasPath => IsReady && !_agent.pathPending && _agent.hasPath && _agent.pathStatus != NavMeshPathStatus.PathInvalid;
 
-        public bool IsMoving => IsReady && _agent.hasPath && !_agent.isStopped;
+        public bool IsMoving => IsReady && _agent.hasPath && !_stopRequested;
 
         public bool HasArrived
         {
@@ -52,10 +65,15 @@ namespace ArkSurvival.AI.Creatures
 
         /// <param name="arrivalDistance">Дистанция по горизонтали до destination, при которой считается, что точка достигнута.</param>
         /// <param name="defaultSpeed">Скорость по умолчанию, применяемая в <see cref="ResetToSpeed"/>.</param>
-        public void Initialize(float arrivalDistance, float defaultSpeed)
+        /// <param name="turnSpeedDegrees">Максимальная угловая скорость разворота, градусы/с; <c>&lt;= 0</c> — поворот не ограничивается.</param>
+        public void Initialize(float arrivalDistance, float defaultSpeed, float turnSpeedDegrees = 0f)
         {
             _arrivalDistance = Mathf.Max(arrivalDistance, MinPathTolerance);
             _defaultSpeed = Mathf.Max(defaultSpeed, 0f);
+            _turnSpeedDegrees = Mathf.Max(turnSpeedDegrees, 0f);
+            _requestedSpeed = _defaultSpeed;
+            _movementBlocked = false;
+            _stopRequested = false;
 
             if (_agent == null)
             {
@@ -67,6 +85,11 @@ namespace ArkSurvival.AI.Creatures
             _agent.isStopped = false;
             _agent.speed = _defaultSpeed;
             _agent.stoppingDistance = Mathf.Max(_agent.stoppingDistance, _arrivalDistance);
+
+            // Поворотом управляет TickRotation по CreatureConfig.TurnSpeed, иначе NavMeshAgent
+            // разворачивает существо мгновенно и конфиг на поворот не влияет.
+            // TurnSpeed <= 0 оставляет поворот агенту (без ограничения).
+            _agent.updateRotation = _turnSpeedDegrees <= 0f;
         }
 
         /// <summary>
@@ -78,7 +101,7 @@ namespace ArkSurvival.AI.Creatures
         {
             get
             {
-                if (!IsReady || _agent.isStopped)
+                if (!IsReady || _stopRequested)
                 {
                     return false;
                 }
@@ -136,6 +159,7 @@ namespace ArkSurvival.AI.Creatures
 
             _agent.ResetPath();
             _agent.isStopped = false;
+            _stopRequested = false;
             if (!_agent.SetDestination(target))
             {
                 return false;
@@ -154,17 +178,69 @@ namespace ArkSurvival.AI.Creatures
 
         public void SetSpeed(float speed)
         {
-            if (_agent == null)
+            _requestedSpeed = Mathf.Max(0f, speed);
+
+            if (_agent == null || _movementBlocked)
             {
+                // Пока идёт разворот, скорость восстановит TickRotation (ApplySpeed).
                 return;
             }
 
-            _agent.speed = Mathf.Max(0f, speed);
+            _agent.speed = _requestedSpeed;
         }
 
         public void ResetToSpeed()
         {
             SetSpeed(_defaultSpeed);
+        }
+
+        /// <summary>
+        /// Применяет запрошенную скорость, но пока существо не развернулось к направлению движения,
+        /// ставит агента на паузу — иначе он уезжает боком/спиной (NavMeshAgent не умеет ездить только вперёд).
+        /// Возвращает true, если движение сейчас заблокировано разворотом.
+        /// </summary>
+        private bool ApplySpeed()
+        {
+            bool shouldBlock = _turnSpeedDegrees > 0f && !IsAlignedToMovement();
+            _movementBlocked = shouldBlock;
+
+            // isStopped выставляется каждый вызов: SetDestination мог сбросить его, а пауза на разворот
+            // должна сохраняться, пока направление не совпадёт с путём.
+            _agent.isStopped = shouldBlock;
+            _agent.speed = shouldBlock ? 0f : _requestedSpeed;
+            return shouldBlock;
+        }
+
+        /// <summary>
+        /// Направление движения совпадает с текущим взглядом в пределах <see cref="MoveAlignAngle"/>.
+        /// Направление берётся из desiredVelocity, пока агент едет, иначе — из следующей точки пути.
+        /// </summary>
+        private bool IsAlignedToMovement()
+        {
+            Vector3 direction = GetMoveDirection();
+            if (direction.sqrMagnitude <= MinPathTolerance * MinPathTolerance)
+            {
+                return true;
+            }
+
+            Vector3 forward = _agent.transform.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude <= MinPathTolerance * MinPathTolerance)
+            {
+                return true;
+            }
+
+            return Vector3.Angle(forward, direction) <= MoveAlignAngle;
+        }
+
+        private Vector3 GetMoveDirection()
+        {
+            Vector3 desiredVelocity = _agent.desiredVelocity;
+            desiredVelocity.y = 0f;
+
+            return desiredVelocity.sqrMagnitude > MinRotationSpeed * MinRotationSpeed
+                ? desiredVelocity
+                : GetPathDirection();
         }
 
         public void Stop()
@@ -174,17 +250,76 @@ namespace ArkSurvival.AI.Creatures
                 return;
             }
 
+            _stopRequested = true;
+            _movementBlocked = false;
             _agent.isStopped = true;
             _agent.ResetPath();
         }
 
-        /// <summary>Поворачивать существо в сторону движения силами NavMeshAgent.</summary>
+        /// <summary>
+        /// Поворачивать существо в сторону движения силами NavMeshAgent. С 35-й задачей поворот
+        /// выполняет <see cref="TickRotation"/>, поэтому по умолчанию агент его не делает.
+        /// </summary>
         public void SetUpdateRotation(bool enabled)
         {
             if (IsValid)
             {
                 _agent.updateRotation = enabled;
             }
+        }
+
+        /// <summary>
+        /// Плавно доворачивает существо к направлению движения с ограничением угловой скорости
+        /// <c>TurnSpeed</c> (градусы/с). Вызывается каждый кадр из <c>CreatureController.Update</c>.
+        /// Пока существо стоит, направление берётся из следующей точки пути — так оно
+        /// успевает развернуться перед началом движения.
+        /// </summary>
+        public void TickRotation(float deltaTime)
+        {
+            if (!IsReady || deltaTime <= 0f || _turnSpeedDegrees <= 0f)
+            {
+                // Без лимита поворот оставлен NavMeshAgent (см. Initialize).
+                return;
+            }
+
+            Vector3 direction = GetMoveDirection();
+
+            if (direction.sqrMagnitude > MinPathTolerance * MinPathTolerance)
+            {
+                Vector3 forward = _agent.transform.forward;
+                forward.y = 0f;
+
+                Quaternion targetRotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+                if (forward.sqrMagnitude > MinPathTolerance * MinPathTolerance)
+                {
+                    targetRotation = Quaternion.RotateTowards(
+                        Quaternion.LookRotation(forward.normalized, Vector3.up),
+                        targetRotation,
+                        _turnSpeedDegrees * deltaTime);
+                }
+
+                _agent.transform.rotation = targetRotation;
+            }
+
+            // Скорость применяется здесь же: пока существо не развернулось, оно стоит на месте,
+            // поэтому забежать ему за спину не спасает — оно сначала разворачивается, потом едет.
+            ApplySpeed();
+        }
+
+        /// <summary>
+        /// Направление на следующую точку маршрута (без вертикали); ноль, если маршрута нет.
+        /// <c>steeringTarget</c> вместо <c>path.corners</c> — не создаёт массив каждый кадр.
+        /// </summary>
+        private Vector3 GetPathDirection()
+        {
+            if (_agent.pathPending || !_agent.hasPath)
+            {
+                return Vector3.zero;
+            }
+
+            Vector3 direction = _agent.steeringTarget - _agent.transform.position;
+            direction.y = 0f;
+            return direction;
         }
 
         private bool TrySnapToNavMesh(Vector3 position, float sampleRadius, out Vector3 result)
