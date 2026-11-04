@@ -117,7 +117,7 @@ namespace ArkSurvival.AI.Creatures
                     if (!wasPursuingBeforeAttack)
                     {
                         Debug.Log(
-                            $"CreatureStateMachine: цель в поле зрения («{Context.Perception.Target?.name}») — Attack.",
+                            $"CreatureStateMachine: цель в поле зрения («{GetTargetName()}») — Attack.",
                             Context.Navigator.Agent);
                     }
 
@@ -130,7 +130,7 @@ namespace ArkSurvival.AI.Creatures
                 if (!wasPursuing)
                 {
                     Debug.Log(
-                        $"CreatureStateMachine: цель в поле зрения («{Context.Perception.Target?.name}») — Chase.",
+                        $"CreatureStateMachine: цель в поле зрения («{GetTargetName()}») — Chase.",
                         Context.Navigator.Agent);
                 }
 
@@ -293,6 +293,13 @@ namespace ArkSurvival.AI.Creatures
                 Investigate.Exit();
                 Investigate.Enter();
             }
+        }
+
+        /// <summary>Имя цели для логов: у уничтоженного объекта <c>?.</c> не спасает (Unity-«null»).</summary>
+        private string GetTargetName()
+        {
+            Transform target = Context.Perception.Target;
+            return target != null ? target.name : "destroyed";
         }
 
         /// <summary>Точка входит в текущую область поиска (радиус <c>SearchRadius</c> вокруг опоры поиска).</summary>

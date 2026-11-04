@@ -140,7 +140,12 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
         /// <summary>Последняя известная позиция ушла от текущей точки назначения — путь надо перестроить.</summary>
         private bool ShouldRepath(Vector3 lastKnown)
         {
-            float threshold = Mathf.Max(MinRepathDistance, Machine.Context.Navigator.Agent.stoppingDistance);
+            CreatureNavigator navigator = Machine.Context.Navigator;
+            // Агент мог быть уничтожен или выключен между тиками: не трогаем его поля.
+            float stoppingDistance = navigator != null && navigator.IsValid && navigator.IsReady
+                ? navigator.Agent.stoppingDistance
+                : 0f;
+            float threshold = Mathf.Max(MinRepathDistance, stoppingDistance);
             Vector3 offset = lastKnown - _destination;
             offset.y = 0f;
             return offset.sqrMagnitude > threshold * threshold;

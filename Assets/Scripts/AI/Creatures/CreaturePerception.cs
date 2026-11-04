@@ -48,8 +48,27 @@ namespace ArkSurvival.AI.Creatures
         /// <summary>Цель, по которой идёт проверка.</summary>
         public Transform Target => _target;
 
-        /// <summary>Цель уже мертва: дальнейшее восприятие и атака бессмысленны (DINO-028).</summary>
-        public bool TargetIsDead => _killable != null && _killable.IsDead;
+        /// <summary>
+        /// Цель уже мертва: дальнейшее восприятие и атака бессмысленны (DINO-028).
+        /// Уничтоженный объект с <see cref="IKillable"/> тоже считается мёртвым (DINO-031):
+        /// без этого ссылка на уничтоженный компонент оставалась бы «живой» для сравнений
+        /// и существо продолжало бы преследовать пустую цель. Если цели не было изначально
+        /// или у неё нет <see cref="IKillable"/>, это не «мёртвая цель» — память истекает сама.
+        /// </summary>
+        public bool TargetIsDead
+        {
+            get
+            {
+                // Ссылка на уничтоженный компонент не обнуляется при сравнении через интерфейс,
+                // поэтому проверка идёт через оператор Unity на Object.
+                if (_killable is UnityEngine.Object killableObject && killableObject == null)
+                {
+                    return true;
+                }
+
+                return _killable != null && _killable.IsDead;
+            }
+        }
 
         /// <summary>
         /// Вызывается каждый кадр, дорогая проверка — только по накопленному интервалу.

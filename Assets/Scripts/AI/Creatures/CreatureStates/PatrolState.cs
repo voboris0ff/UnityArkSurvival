@@ -82,6 +82,15 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
             CreatureContext context = Machine.Context;
             CreatureNavigator navigator = context.Navigator;
 
+            // Агент стал неготовым (выключен, снят с NavMesh) — патрулировать некуда.
+            // Без этого состояние молча зависало бы: Выбор точки требует IsReady.
+            if (!navigator.IsReady)
+            {
+                Debug.LogWarning("PatrolState: NavMeshAgent не готов — выход в Idle.", navigator.Agent);
+                Machine.ChangeState(Machine.Idle);
+                return;
+            }
+
             // Домашняя точка перенесена (например, неудачный поиск из DINO-016) — старый маршрут
             // больше не относится к патрулю, точку нужно выбирать вокруг новой.
             if (IsHomeChanged(context))

@@ -96,6 +96,8 @@ namespace ArkSurvival.AI.Creatures
         /// Возвращает true, если агенту уже поставлен путь и он ещё не пройден.
         /// Пока путь считается, у агента <c>hasPath == false</c>, а <c>remainingDistance</c> равен 0,
         /// поэтому сначала проверяется <c>pathPending</c>, а прибытие определяется по дистанции до destination.
+        /// Частичный путь (цель недостижима целиком) считается неактивным: состояния по этому признаку
+        /// отказываются от недостижимой точки, а не идут к её краю (DINO-031).
         /// </summary>
         public bool IsPathActive
         {
@@ -111,17 +113,14 @@ namespace ArkSurvival.AI.Creatures
                     return true;
                 }
 
-                if (!_agent.hasPath || _agent.pathStatus == NavMeshPathStatus.PathInvalid)
+                if (!_agent.hasPath ||
+                    _agent.pathStatus == NavMeshPathStatus.PathInvalid ||
+                    _agent.pathStatus == NavMeshPathStatus.PathPartial)
                 {
                     return false;
                 }
 
-                if (_agent.pathStatus == NavMeshPathStatus.PathComplete)
-                {
-                    return !HasArrived;
-                }
-
-                return _agent.remainingDistance > _arrivalDistance;
+                return !HasArrived;
             }
         }
 

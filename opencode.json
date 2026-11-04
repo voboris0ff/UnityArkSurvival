@@ -1,15 +1,15 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "a6api/deepseek-v4-flash",
+  "model": "a6api/deepseek-v4.1-flash-1017",
   "tool_output": {
-    "max_lines": 400,
+    "max_lines": 150,
     "max_bytes": 16384
   },
   "agents": {
     "autodev": {
       "description": "Automated single roadmap task runner (scripts/auto_dev.py)",
       "mode": "primary",
-      "steps": 25,
+      "steps": 50,
       "permissions": [
         { "action": "shell", "resource": "*", "effect": "deny" },
         { "action": "webfetch", "resource": "*", "effect": "deny" },

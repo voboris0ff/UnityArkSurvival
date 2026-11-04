@@ -134,8 +134,13 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
         /// </summary>
         private bool ShouldRepath(CreatureContext context)
         {
-            Vector3 goal = GetDestinationPoint(context.Perception.Target, context.Navigator.Agent);
-            float threshold = Mathf.Max(MinRepathDistance, context.Navigator.Agent.stoppingDistance);
+            CreatureNavigator navigator = context.Navigator;
+            // Агент мог быть уничтожен или выключен между тиками: не трогаем его поля.
+            float stoppingDistance = navigator != null && navigator.IsValid && navigator.IsReady
+                ? navigator.Agent.stoppingDistance
+                : 0f;
+            Vector3 goal = GetDestinationPoint(context.Perception.Target, navigator != null ? navigator.Agent : null);
+            float threshold = Mathf.Max(MinRepathDistance, stoppingDistance);
 
             Vector3 offset = goal - _destination;
             offset.y = 0f;
@@ -173,7 +178,13 @@ namespace ArkSurvival.AI.Creatures.CreatureStates
         private float GetChaseSpeed()
         {
             CreatureConfig config = Machine.Context.Config;
-            return config != null ? config.ChaseSpeed : Machine.Context.Navigator.Agent.speed;
+            if (config != null)
+            {
+                return config.ChaseSpeed;
+            }
+
+            CreatureNavigator navigator = Machine.Context.Navigator;
+            return navigator != null && navigator.IsReady ? navigator.Agent.speed : 0f;
         }
 
         private void UpdateDestination()

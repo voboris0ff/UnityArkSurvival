@@ -15,6 +15,9 @@ namespace ArkSurvival.AI.Creatures
         private const float TargetSearchRadius = 50f;
         private const float MemoryLogInterval = 1f;
 
+        /// <summary>Радиус проверки, что домашняя точка достижима по NavMesh, м.</summary>
+        private const float HomeReachSampleRadius = 2f;
+
         [SerializeField] private CreatureConfig _config;
         [SerializeField] private NavMeshAgent _agent;
 
@@ -94,6 +97,16 @@ namespace ArkSurvival.AI.Creatures
             _home = new CreatureHome(_agent);
             _home.Initialize(_homePoint != null ? _homePoint.position : transform.position);
 
+            // Домашняя точка вне NavMesh: патруль вокруг неё не найдёт ни одной точки,
+            // а Return не построит путь. Предупреждаем один раз при старте (DINO-031).
+            if (_navigator.IsReady && !_navigator.CanReach(_home.Position, HomeReachSampleRadius))
+            {
+                Debug.LogWarning(
+                    $"CreatureController: домашняя точка {_home.Position} недостижима по NavMesh — " +
+                    "патруль и возврат работать не будут. Проверьте NavMesh вокруг дома.",
+                    this);
+            }
+
             _eyeTransform = ResolveEyePoint();
             _vision = new CreatureVision(_eyeTransform, _config);
             _perception = new CreaturePerception(_target, _vision, _config.PerceptionInterval);
@@ -118,9 +131,6 @@ namespace ArkSurvival.AI.Creatures
             _stateMachine = new CreatureStateMachine(
                 new CreatureContext(_navigator, _memory, _vision, _perception, _hearing, _config, _home, _attack));
 
-            // Подписка симметрична отписке в OnDisable: статическое событие живёт всё время игры.
-            NoiseBroadcaster.Emitted += OnNoiseEmitted;
-
             _stateMachine.Start();
 
             if (_target != null)
@@ -131,6 +141,16 @@ namespace ArkSurvival.AI.Creatures
                     $"память {_config.MemoryDuration} с.",
                     this);
             }
+        }
+
+        /// <summary>
+        /// Подписка на глобальное событие шума живёт ровно пока объект включён: Start вызывается
+        /// один раз, а объект могут выключить и включить. Обработчик сам ждёт готовности слуха,
+        /// поэтому подписка до Start безопасна.
+        /// </summary>
+        private void OnEnable()
+        {
+            NoiseBroadcaster.Emitted += OnNoiseEmitted;
         }
 
         private void OnDisable()
@@ -286,7 +306,7 @@ namespace ArkSurvival.AI.Creatures
                 if (visible)
                 {
                     Debug.Log(
-                        $"CreatureController: вижу цель «{_target?.name}» в точке {_perception.VisiblePoint}, " +
+                        $"CreatureController: вижу цель «{GetTargetName()}» в точке {_perception.VisiblePoint}, " +
                         $"дистанция {Vector3.Distance(_eyeTransform.position, _perception.VisiblePoint):F1} м.",
                         this);
                 }
@@ -332,6 +352,12 @@ namespace ArkSurvival.AI.Creatures
                     $"позиция {_memory.LastKnownPosition}, состояние {_stateMachine.CurrentName}.",
                     this);
             }
+        }
+
+        private string GetTargetName()
+        {
+            // Уничтоженная цель: ?. не ловит «фальшивый null» Unity и упал бы на .name.
+            return _target != null ? _target.name : "destroyed";
         }
 
         private bool ValidateReferences()

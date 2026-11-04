@@ -1,73 +1,61 @@
 # AGENTS.md
 
-Единственный источник правил. Другие документы не дублируют правила, а ссылаются на этот файл.
+Single source of rules. Other documents reference it and do not duplicate the rules.
 
 ## Project
-- Unity 6000.0.85f1 (Unity 6), URP 17.0.4.
-- Input System 1.20.0. Legacy Input Manager не использовать.
-- AI Navigation 2.0.15.
-- Скрипты: C# в `Assets/Scripts/`. Namespace соответствует папке: `Assets/Scripts/AI` → `ArkSurvival.AI`.
+- Unity 6000.0.85f1, URP 17.0.4, Input System 1.20.0 (do not use the Legacy Input Manager), AI Navigation 2.0.15.
+- Scripts: C# in `Assets/Scripts/`. Namespace follows the folder: `Assets/Scripts/AI` → `ArkSurvival.AI`.
 
-## C# rules
-- Публичные члены: `PascalCase`; приватные поля: `_camelCase`.
-- Вместо публичных полей — `[SerializeField] private`.
-- Один класс на файл, имя файла совпадает с именем класса.
-- Кэшировать ссылки в `Awake`/`Start`; без `GameObject.Find`/`FindObjectOfType`/`GetComponent` в `Update`.
-- Избегать лишних абстракций и новых зависимостей.
+## C#
+- Public members `PascalCase`, private fields `_camelCase`; `[SerializeField] private` instead of public fields.
+- One class per file, file name = class name.
+- Cache references in `Awake`/`Start`; no `Find`/`FindObjectOfType`/`GetComponent` in `Update`.
+- No unnecessary abstractions and no new dependencies.
 
-## Запрещено
-- Открывать или редактировать `.unity`, `.prefab`, `.meta`, `.asset`, `.mat`, `.anim`, `.controller`. Исключение — их чтение допустимо для анализа (например, чтобы узнать имя Animator-параметра); запись — нет.
-- Создавать `.meta` вручную.
-- Добавлять/обновлять пакеты, запускать git commit/push.
-- Запускать Unity build, PlayMode/EditMode тесты, длительные проверки.
-- Утверждать, что код проверен компиляцией или в редакторе, если этого не было.
+## Forbidden
+- Writing to `.unity`, `.prefab`, `.meta`, `.asset`, `.mat`, `.anim`, `.controller`. Reading for analysis is allowed.
+- Creating `.meta`, changing packages, git commit/push.
+- Running the build, PlayMode/EditMode tests, long checks.
+- Claiming that code was verified by compilation or in the editor when it was not.
 
-## Неопределённости и имена
-- **Отсутствующее имя не блокирует задачу.** Если нужен идентификатор (Animator-параметр, имя слоя, поле, хеш), агент выбирает осмысленное имя сам, пишет его в раздел «Соглашения об именах» файла `docs/project-context.md` и добавляет пункт в `docs/manual-queue.md` о ручной настройке под это имя.
-- **Числовые значения игрового баланса** (скорости, урон, радиусы) берутся как стартовые с пометкой «временное» и выносятся на подбор пользователем. Это не блокирует задачу.
-- Блокировка допустима только когда задача физически невыполнима без ответа пользователя (например, требуется решение о геймдизайне, меняющем контракт). В таком случае — `[!]`, пункт в `manual-queue.md` и переход к следующей разблокированной задаче.
+## Undefined names
+- A new name outside code (Animator parameter, layer, tag, animation event, menu): pick a meaningful one, record it in "Naming Conventions" in `docs/project-context.md` and add an item to `docs/manual-queue.md`. Names in code live in the code and are not duplicated in documents.
+- Balance numbers (speeds, radii, damage): a start value marked "temporary"; tuning is up to the user.
+- Blocking (`[!]`) only when the task cannot be done without a user decision. Then: an item in `manual-queue.md`, status `[!]`, stop working on the task.
 
-## Общение с пользователем
-- **Единственный канал — `docs/manual-queue.md`.** Задавать вопросы в чате во время сессии нельзя: пользователь их не увидит. Итоговый ответ сессии — краткая сводка для оркестратора, не диалог.
-- **Начало сессии:** первым делом прочитать `docs/manual-queue.md` и разобрать блоки `Ответ пользователя:`.
-  - Ответ есть и достаточен → пункт удалить целиком, обновить статус связанной задачи в `docs/roadmap.md` и состояние в `docs/progress.md`.
-  - Ответа нет или он неполный → дописать в этот пункт блок `Вопрос агенту:` с одним конкретным вопросом, задачу в roadmap пометить `[!]` и продолжить с другой задачей.
-- **Конец сессии:** каждый новый ручной шаг добавить в `docs/manual-queue.md` с блоком `Ответ пользователя:` (пустой).
-- Пункты в очереди должны быть конкретными: что сделать, где, зачем, когда готово.
+## Communication with the user
+- The only channel is `docs/manual-queue.md`. No questions in chat: the user will not see them.
+- The orchestrator passes filled `Ответ пользователя:` blocks in the prompt. If there are none, do not read the file until you need to add an item.
+- Answer sufficient → delete the item entirely and update the task status in `roadmap.md`.
+- Answer incomplete → append one specific `Вопрос агенту:` to the item, mark the task `[!]`.
+- Every new manual step is an item following the template below.
+- **Language:** the user speaks Russian, so `docs/manual-queue.md` is written in Russian (headings, steps, questions). All other documentation is in English.
 
-## Формат `manual-queue.md`
-- Только незакрытые пункты. Выполненные удаляются (история — в `docs/session-logs/`).
-- Шаблон пункта:
-  ```md
-  ### DINO-XXX — короткий заголовок
-  - **Что сделать:** шаги по пунктам.
-  - **Где:** путь/меню редактора.
-  - **Зачем:** причина.
-  - **Готово, когда:** измеримый результат.
-  - **Ответ пользователя:**
-    <!-- пользователь пишет здесь; агент удаляет пункт после успешной обработки -->
-  ```
+```md
+### DINO-XXX — короткий заголовок
+- **Что сделать:** шаги.
+- **Где:** путь/меню редактора.
+- **Зачем:** причина.
+- **Готово, когда:** измеримый результат.
+- **Ответ пользователя:**
+  <!-- пользователь пишет здесь; агент удаляет пункт после обработки -->
+```
 
 ## Workflow
-- Одна задача roadmap за одну сессию; соседние задачи «заодно» не делать.
-- Минимальные точечные изменения; не трогать файлы вне задачи.
-- Крупную правку сначала описать кратким планом и дождаться подтверждения.
-- После задачи: обновить `docs/roadmap.md`, `docs/progress.md`, `docs/manual-queue.md`, создать краткий лог в `docs/session-logs/`.
+- One roadmap task per session. Do not do neighbouring tasks "along the way", do not change other statuses.
+- Edits are minimal and targeted, only the files of the task.
+- Read only what you need: your task line in `roadmap.md`, `progress.md` and `project-context.md` — only if unavoidable. No project audit. Do not re-read files you just changed.
+- Large edit (many files or a contract change): raise a question in `manual-queue.md`, mark the task `[!]`. Waiting for a chat confirmation is not allowed.
 
-## Контекст и экономия токенов
-- This file (`AGENTS.md`) is loaded by OpenCode itself. Do not re-attach it via `--file`.
-- Не прикладывай `docs/*.md`. Читай по требованию: `manual-queue.md` первым, `progress.md`/`project-context.md` — когда нужны по задаче, `roadmap.md` — только строку текущей задачи (оркестратор её уже прислал).
-- Без широкого аудита проекта и повторного чтения больших документов; открывай только файлы, нужные задаче.
-- `scripts/auto_dev.py` запускает агента `autodev` (`opencode.json`): `steps: 25`, shell/web/subagent запрещены, модель `a6api/deepseek-v4.1-flash-1017#low`. Не дублируй эти правила в промптах.
+## Task completion
+1. `docs/roadmap.md`: `[x]` — done, `[!]` — waiting for the user. The status changes in place, the task is not deleted; moving it to `docs/roadmap-archive.md` is done by the orchestrator.
+2. `docs/progress.md`: targeted edits of the "Done" and "Next task" lines. Do not add implementation details.
+3. `docs/manual-queue.md`: only new items and removal of processed ones.
+4. Do not write a session log: the orchestrator creates it.
+5. Final answer — one short line about what was done.
 
-## Ограничения объёма документов
-- `docs/progress.md` — **40–60 строк**: статус, что реализовано, текущая и следующая задача, ссылки. Подробности реализации — только в `docs/session-logs/`.
-- Лог сессии — **не больше ~20 строк** по шаблону: время, результат, что проверено, что изменено, что осталось. Без дампа вывода консоли.
-- `docs/manual-queue.md` — только актуальные пункты, без архива.
-- `docs/project-context.md` — стабильные факты и соглашения; гипотетическая архитектура там не хранится.
-
-## Context files
-- `docs/project-context.md` — стек, реализованное состояние, соглашения об именах.
-- `docs/roadmap.md` — задачи и статусы: `[ ]` ожидает, `[x]` выполнено, `[!]` ждёт пользователя.
-- `docs/progress.md` — краткий текущий статус.
-- `docs/manual-queue.md` — канал связи с пользователем (ручные шаги и вопросы).
+## Document sizes (in characters, not lines)
+- `docs/progress.md` — up to ~3 000 characters: status, current and next task, a short list of ready systems (one line per system), links. No per-task tables: history is in `docs/session-logs/` and `roadmap.md`.
+- `docs/roadmap.md` — one line per task, up to ~200 characters. Details are in the code and `project-context.md`.
+- `docs/manual-queue.md` — open items only. Accepted agreements move to `project-context.md`.
+- `docs/project-context.md` — 6 000–7 000 characters. Only what is not visible from code: names and contracts on the Unity-asset/code boundary (Animator parameters, layers, tags, inspector fields, animation events), contracts between systems (frame order, transition table, priorities, interface and event signatures), user decisions. Forbidden: describing class logic, task history by number, copies of balance numbers (instead — the field name and class).

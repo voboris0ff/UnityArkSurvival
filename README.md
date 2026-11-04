@@ -1,16 +1,16 @@
 # Unity Auto Dev
 
-## Установка
-1. Скопируй содержимое архива в корень Unity-проекта или перенеси файлы по соответствующим путям.
-2. Убедись, что команда `opencode` работает из терминала в корне проекта.
-3. Проверь, что `AGENTS.md` и папка `docs/` находятся в корне проекта.
-4. Запусти:
+## Installation
+1. Copy the archive contents into the Unity project root, or move the files to the matching paths.
+2. Make sure the `opencode` command works from a terminal in the project root.
+3. Check that `AGENTS.md` and the `docs/` folder are in the project root.
+4. Run:
 
 ```bash
 python scripts/auto_dev.py --tasks 3
 ```
 
-Другие варианты:
+Other variants:
 
 ```bash
 python scripts/auto_dev.py --tasks 10
@@ -18,19 +18,19 @@ python scripts/auto_dev.py --tasks all
 python scripts/auto_dev.py --tasks 2 --timeout 1800
 ```
 
-Количество задач по умолчанию берётся из `auto-dev.yaml`.
+The default number of tasks comes from `auto-dev.yaml`.
 
-## Как работает общение с пользователем
-- Единственный канал — `docs/manual-queue.md`.
-- Каждый пункт имеет блок `Ответ пользователя:`, куда пользователь пишет результат.
-- В начале сессии агент разбирает ответы: достаточный ответ → пункт удаляется и статус задачи обновляется; недостаточный → в пункт дописывается `Вопрос агенту:`, задача помечается `[!]`, а работа идёт со следующей задачей.
-- Задачи `[!]` не останавливают оркестратор.
+## How communication with the user works
+- The only channel is `docs/manual-queue.md`.
+- Every item has an `Ответ пользователя:` block where the user writes the result. That file stays in Russian.
+- At the start of a session the agent processes the answers: a sufficient answer → the item is deleted and the task status is updated; an insufficient one → `Вопрос агенту:` is appended to the item, the task is marked `[!]`, and work continues with the next task.
+- `[!]` tasks do not stop the orchestrator.
 
-## Важные ограничения текущего прототипа
-- Запускать из корня Unity-проекта.
-- Оркестратор берёт первую задачу со статусом `[ ]`; `[x]` и `[!]` пропускаются.
-- Каждая задача запускается отдельной командой `opencode run`, то есть в новом контексте.
-- Достаточно, чтобы агент поставил `[x]` в roadmap и вывел `TASK_RESULT: DONE`; `TASK_SCORE` проверяется только на наличие.
-- Если задача осталась `[ ]` и не помечена `[!]`, выполнение останавливается, чтобы не размножать ошибки.
-- Лог сессии — короткий хвост вывода (~15 строк), полный вывод не сохраняется.
-- Прототип не является транзакционной системой: перед первым запуском сделай копию проекта или используй Git локально.
+## Important limitations of the current prototype
+- Run from the Unity project root.
+- The orchestrator takes the first task with status `[ ]`; `[x]` and `[!]` are skipped.
+- Each task runs as a separate `opencode run` command, i.e. in a fresh context.
+- It is enough for the agent to set `[x]` in the roadmap and print `TASK_RESULT: DONE`; `TASK_SCORE` is only checked for presence.
+- If a task is still `[ ]` and not marked `[!]`, execution stops so that errors are not multiplied.
+- The session log is a short output tail (~15 lines); the full output is not saved.
+- The prototype is not transactional: back up the project before the first run or use Git locally.

@@ -24,13 +24,13 @@ MonoBehaviour:
   _obstacleLayerMask:
     serializedVersion: 2
     m_Bits: 128
-  _hearingRange: 25
+  _hearingRange: 30
   _memoryDuration: 10
   _investigateDuration: 12
   _searchDuration: 15
   _searchRadius: 15
   _searchStopDuration: 1
-  _patrolRadius: 20
+  _patrolRadius: 30
   _patrolSpeed: 2
   _patrolWaitChance: 0.5
   _patrolWaitMin: 1
