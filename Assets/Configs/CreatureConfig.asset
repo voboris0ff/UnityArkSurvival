@@ -13,22 +13,31 @@ MonoBehaviour:
   m_Name: CreatureConfig
   m_EditorClassIdentifier: 
   _moveSpeed: 4
-  _chaseSpeed: 6
-  _turnSpeed: 5
+  _chaseSpeed: 8
+  _turnSpeed: 240
   _arrivalDistance: 0.5
   _destinationUpdateInterval: 0.15
-  _perceptionInterval: 0.2
-  _sightDistance: 20
-  _sightAngle: 110
-  _eyeHeight: 1.5
+  _perceptionInterval: 0.1
+  _sightDistance: 50
+  _sightAngle: 300
+  _eyeHeight: 0
   _obstacleLayerMask:
     serializedVersion: 2
-    m_Bits: 55
-  _hearingRange: 12
-  _memoryDuration: 5
-  _searchDuration: 6
-  _attackRange: 2.5
+    m_Bits: 128
+  _hearingRange: 25
+  _memoryDuration: 10
+  _investigateDuration: 12
+  _searchDuration: 15
+  _searchRadius: 15
+  _searchStopDuration: 1
+  _patrolRadius: 20
+  _patrolSpeed: 2
+  _patrolWaitChance: 0.5
+  _patrolWaitMin: 1
+  _patrolWaitMax: 2
+  _attackRange: 3
   _attackAngle: 90
-  _attackCooldown: 1.5
+  _attackCooldown: 2
   _attackWindup: 0.4
+  _attackHitTime: 0.25
   _attackDamage: 10

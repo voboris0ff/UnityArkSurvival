@@ -1,3 +1,4 @@
+using ArkSurvival.Combat;
 using UnityEngine;
 
 namespace ArkSurvival.AI.Creatures
@@ -6,10 +7,13 @@ namespace ArkSurvival.AI.Creatures
     /// Периодический тик восприятия: раз в <see cref="Interval"/> секунд проверяет зрение на текущей цели.
     /// Не выполняет Physics-проверки каждый кадр и не трогает память — только выдаёт результат
     /// последней проверки. Решения о переходах состояний принимает тот, кто вызывает <see cref="Tick"/>.
+    /// Мёртвая цель (<see cref="IKillable.IsDead"/>) не видна никогда: после смерти игрока существо
+    /// перестаёт им интересоваться без дополнительной проверки в каждом кадре (DINO-028).
     /// </summary>
     public sealed class CreaturePerception
     {
         private readonly Transform _target;
+        private readonly IKillable _killable;
         private readonly CreatureVision _vision;
         private readonly float _interval;
         private float _elapsedTime;
@@ -24,6 +28,7 @@ namespace ArkSurvival.AI.Creatures
         public CreaturePerception(Transform target, CreatureVision vision, float interval)
         {
             _target = target;
+            _killable = target != null ? target.GetComponentInParent<IKillable>() : null;
             _vision = vision;
             _interval = Mathf.Max(0f, interval);
         }
@@ -42,6 +47,9 @@ namespace ArkSurvival.AI.Creatures
 
         /// <summary>Цель, по которой идёт проверка.</summary>
         public Transform Target => _target;
+
+        /// <summary>Цель уже мертва: дальнейшее восприятие и атака бессмысленны (DINO-028).</summary>
+        public bool TargetIsDead => _killable != null && _killable.IsDead;
 
         /// <summary>
         /// Вызывается каждый кадр, дорогая проверка — только по накопленному интервалу.
@@ -62,7 +70,9 @@ namespace ArkSurvival.AI.Creatures
             _elapsedTime = 0f;
             _hasResult = true;
             Vector3 point = Vector3.zero;
-            _targetVisible = _vision != null && _vision.CanSee(_target, out point);
+
+            // Мёртвая цель не видна: без этого зрение удерживало бы её в цели и после смерти.
+            _targetVisible = !TargetIsDead && _vision != null && _vision.CanSee(_target, out point);
 
             if (_targetVisible)
             {

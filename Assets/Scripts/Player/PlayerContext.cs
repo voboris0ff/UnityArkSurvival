@@ -31,7 +31,8 @@ namespace ArkSurvival.Player
             PlayerTransform = playerTransform;
         }
 
-        public bool IsInvulnerable { get; set; }
+        public bool IsInvulnerable => InvulnerabilityRemaining > 0f;
+        public float InvulnerabilityRemaining { get; private set; }
         public float RollCooldownRemaining { get; private set; }
         public float JumpBufferRemaining { get; private set; }
         public bool CanRoll => RollCooldownRemaining <= 0f;
@@ -66,6 +67,11 @@ namespace ArkSurvival.Player
 
         public void Tick(float deltaTime)
         {
+            if (InvulnerabilityRemaining > 0f)
+            {
+                InvulnerabilityRemaining = Mathf.Max(0f, InvulnerabilityRemaining - deltaTime);
+            }
+
             if (RollCooldownRemaining > 0f)
             {
                 RollCooldownRemaining = Mathf.Max(0f, RollCooldownRemaining - deltaTime);
@@ -90,6 +96,21 @@ namespace ArkSurvival.Player
         public void StartRollCooldown()
         {
             RollCooldownRemaining = Config.RollCooldown;
+        }
+
+        public void StartInvulnerability(float duration)
+        {
+            if (duration <= 0f)
+            {
+                return;
+            }
+
+            InvulnerabilityRemaining = Mathf.Max(InvulnerabilityRemaining, duration);
+        }
+
+        public void ClearInvulnerability()
+        {
+            InvulnerabilityRemaining = 0f;
         }
     }
 }

@@ -6,6 +6,7 @@ namespace ArkSurvival.Player.States
     {
         private Vector3 _direction;
         private float _elapsed;
+        private bool _invulnerabilityStarted;
 
         public RollState(PlayerContext context, PlayerStateMachine machine) : base(context, machine)
         {
@@ -14,18 +15,18 @@ namespace ArkSurvival.Player.States
         public override void Enter()
         {
             _elapsed = 0f;
+            _invulnerabilityStarted = false;
             _direction = ResolveDirection();
             Context.Motor.FaceDirection(_direction);
             Context.Crouch.BeginRollCapsule();
             Context.Stamina.TrySpendRoll();
             Context.StartRollCooldown();
-            UpdateInvulnerability();
         }
 
         public override void Exit()
         {
             Context.Crouch.CancelRollCapsule();
-            Context.IsInvulnerable = false;
+            Context.ClearInvulnerability();
         }
 
         public override void Tick(float deltaTime)
@@ -53,8 +54,13 @@ namespace ArkSurvival.Player.States
 
         private void UpdateInvulnerability()
         {
-            Context.IsInvulnerable = _elapsed >= Context.Config.IFramesStart
-                && _elapsed <= Context.Config.IFramesEnd;
+            if (_invulnerabilityStarted || _elapsed < Context.Config.IFramesStart)
+            {
+                return;
+            }
+
+            _invulnerabilityStarted = true;
+            Context.StartInvulnerability(Context.Config.IFramesEnd - Context.Config.IFramesStart);
         }
 
         private Vector3 ResolveDirection()

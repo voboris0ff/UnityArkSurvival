@@ -1,4 +1,5 @@
 using ArkSurvival.AI.Perception;
+using ArkSurvival.Combat;
 using ArkSurvival.Data;
 using UnityEngine;
 using UnityEngine.AI;
@@ -32,6 +33,7 @@ namespace ArkSurvival.AI.Creatures
         private CreaturePerception _perception;
         private CreatureHearing _hearing;
         private CreatureHome _home;
+        private CreatureAttack _attack;
         private CreatureStateMachine _stateMachine;
         private Transform _eyeTransform;
         private bool _wasTargetVisible;
@@ -45,6 +47,7 @@ namespace ArkSurvival.AI.Creatures
         public CreaturePerception Perception => _perception;
         public CreatureHearing Hearing => _hearing;
         public CreatureHome Home => _home;
+        public CreatureAttack Attack => _attack;
         public Transform Target => _target;
         public CreatureStateMachine StateMachine => _stateMachine;
         public Transform HomePoint => _homePoint;
@@ -95,6 +98,7 @@ namespace ArkSurvival.AI.Creatures
             _vision = new CreatureVision(_eyeTransform, _config);
             _perception = new CreaturePerception(_target, _vision, _config.PerceptionInterval);
             _hearing = new CreatureHearing(transform, _config);
+            _attack = new CreatureAttack(transform, _config);
 
             if (_vision.ObstacleLayerMask == 0)
             {
@@ -112,7 +116,7 @@ namespace ArkSurvival.AI.Creatures
             }
 
             _stateMachine = new CreatureStateMachine(
-                new CreatureContext(_navigator, _memory, _vision, _perception, _hearing, _config, _home));
+                new CreatureContext(_navigator, _memory, _vision, _perception, _hearing, _config, _home, _attack));
 
             // Подписка симметрична отписке в OnDisable: статическое событие живёт всё время игры.
             NoiseBroadcaster.Emitted += OnNoiseEmitted;
@@ -219,9 +223,54 @@ namespace ArkSurvival.AI.Creatures
 
             _stateMachine.Tick(deltaTime);
 
+            // Замах и пауза атаки тикают каждый кадр независимо от состояния: начатый замах
+            // не отменяется сменой поведения (DINO-027). Попадание фиксируется один раз (DINO-026)
+            // и сразу применяется к цели (DINO-028).
+            _attack.Tick(deltaTime);
+            ConsumeAttackHit();
+
             // Поворот — единственная точка управления вращением: NavMeshAgent только прокладывает путь,
             // а угловую скорость ограничивает CreatureConfig.TurnSpeed.
             _navigator.TickRotation(deltaTime);
+        }
+
+        /// <summary>
+        /// Применяет единственное за замах попадание (DINO-028): тот же кадр, в котором
+        /// <see cref="CreatureAttack"/> зафиксировал удар. Попадание забирается ровно один раз,
+        /// поэтому повторной попытки в этом замахе нет ни при промахе, ни при <c>false</c>
+        /// от <see cref="IKillable.TryKill"/> (цель уже мертва или в i-frames).
+        /// </summary>
+        private void ConsumeAttackHit()
+        {
+            if (!_attack.TryConsumeHit(out Transform hitTarget) || hitTarget == null)
+            {
+                return;
+            }
+
+            IKillable killable = hitTarget.GetComponentInParent<IKillable>();
+            if (killable == null)
+            {
+                Debug.Log(
+                    $"CreatureController: попадание по «{hitTarget.name}», но у цели нет IKillable — смерть не применяется.",
+                    this);
+                return;
+            }
+
+            bool killed = killable.TryKill(transform.position);
+            if (!killed)
+            {
+                Debug.Log(
+                    $"CreatureController: попадание по «{hitTarget.name}» не принято (мертва или неуязвима) — повтор в этом замахе не выполняется.",
+                    this);
+                return;
+            }
+
+            Debug.Log(
+                $"CreatureController: цель «{hitTarget.name}» убита — память сброшена, поведение Patrol.",
+                this);
+
+            // Замах/пауза снимаются, память очищается, состояние — Patrol: мёртвую цель не преследуют.
+            _stateMachine.NotifyTargetKilled();
         }
 
         /// <summary>

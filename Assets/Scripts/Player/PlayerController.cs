@@ -1,10 +1,11 @@
+using ArkSurvival.Combat;
 using ArkSurvival.Data;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace ArkSurvival.Player
 {
-    public sealed class PlayerController : MonoBehaviour
+    public sealed class PlayerController : MonoBehaviour, IKillable
     {
         [SerializeField] private PlayerInputReader _input;
         [SerializeField] private CharacterMotor _motor;
@@ -20,6 +21,41 @@ namespace ArkSurvival.Player
         private float _nextLogTime;
 
         public PlayerStateMachine StateMachine => _stateMachine;
+
+        /// <summary>Игрок мёртв (DINO-028): любое попадание смертельно, респавна нет.</summary>
+        public bool IsDead { get; private set; }
+
+        /// <summary>
+        /// Попытка убить игрока (DINO-028): любое попадание смертельно, кроме i-frames кувырка
+        /// и уже наступившей смерти. Повторная попытка в том же замахе смысла не имеет.
+        /// </summary>
+        public bool TryKill(Vector3 source)
+        {
+            if (IsDead || _context == null || _context.IsInvulnerable)
+            {
+                return false;
+            }
+
+            IsDead = true;
+            ApplyDeath(source);
+            return true;
+        }
+
+        private void ApplyDeath(Vector3 source)
+        {
+            _context.ClearInvulnerability();
+            _motor.SetJumpHeld(false);
+            _motor.Move(Vector3.zero, 0f, 0f);
+
+            if (_animator != null)
+            {
+                _animator.SetDead(true);
+            }
+
+            Debug.Log(
+                $"PlayerController: игрок убит попаданием из {source}. Движение и ввод остановлены (DINO-028).",
+                this);
+        }
 
         private void Awake()
         {
@@ -69,6 +105,11 @@ namespace ArkSurvival.Player
         private void Update()
         {
             UpdateCursorLock();
+
+            if (IsDead)
+            {
+                return;
+            }
 
             if (_stateMachine == null)
             {

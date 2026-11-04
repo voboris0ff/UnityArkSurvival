@@ -11,10 +11,13 @@ namespace ArkSurvival.Player
         private static readonly int CrouchingHash = Animator.StringToHash("Crouching");
         private static readonly int CrouchAmountHash = Animator.StringToHash("CrouchAmount");
         private static readonly int RollHash = Animator.StringToHash("Roll");
+        private static readonly int DeadHash = Animator.StringToHash("Dead");
 
         [SerializeField] private Animator _animator;
 
         private bool _wasRolling;
+        private bool _hasDeadParameter;
+        private bool _deadWarningLogged;
 
         private void Awake()
         {
@@ -23,10 +26,13 @@ namespace ArkSurvival.Player
                 _animator = GetComponentInChildren<Animator>();
             }
 
-            if (_animator != null)
+            if (_animator == null)
             {
-                _animator.applyRootMotion = false;
+                return;
             }
+
+            _animator.applyRootMotion = false;
+            _hasDeadParameter = HasParameter(DeadHash);
         }
 
         public void Tick(PlayerContext context, PlayerStateMachine machine)
@@ -53,6 +59,48 @@ namespace ArkSurvival.Player
             }
 
             _wasRolling = rolling;
+        }
+
+        /// <summary>
+        /// Публикует смерть игрока (DINO-028). Параметр <c>Dead</c> необязателен: если его нет
+        /// в контроллере, движение просто останавливается, а предупреждение пишется один раз.
+        /// </summary>
+        public void SetDead(bool dead)
+        {
+            if (_animator == null)
+            {
+                return;
+            }
+
+            if (!_hasDeadParameter)
+            {
+                if (!_deadWarningLogged)
+                {
+                    _deadWarningLogged = true;
+                    Debug.LogWarning(
+                        "PlayerAnimator: в Player.controller нет параметра Dead — смерть без анимации. " +
+                        "Добавьте bool-параметр Dead (см. manual-queue.md).",
+                        this);
+                }
+
+                return;
+            }
+
+            _animator.SetBool(DeadHash, dead);
+        }
+
+        private bool HasParameter(int parameterHash)
+        {
+            AnimatorControllerParameter[] parameters = _animator.parameters;
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                if (parameters[i].nameHash == parameterHash)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

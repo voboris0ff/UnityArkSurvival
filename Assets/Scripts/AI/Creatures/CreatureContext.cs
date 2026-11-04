@@ -23,6 +23,9 @@ namespace ArkSurvival.AI.Creatures
         /// <summary>Выбор случайной достижимой точки патруля вокруг домашней точки (DINO-017).</summary>
         public CreaturePatrolPointSelector PatrolPoints { get; }
 
+        /// <summary>Ближняя атака: дистанция, сектор, замах, единственная проверка попадания (DINO-026).</summary>
+        public CreatureAttack Attack { get; }
+
         /// <summary>Текущая домашняя точка. Читается из <see cref="Home"/>, поэтому смена точки видна всем состояниям.</summary>
         public Vector3 HomePosition => Home != null ? Home.Position : Navigator != null ? Navigator.Position : Vector3.zero;
 
@@ -33,7 +36,8 @@ namespace ArkSurvival.AI.Creatures
             CreaturePerception perception,
             CreatureHearing hearing,
             CreatureConfig config,
-            CreatureHome home)
+            CreatureHome home,
+            CreatureAttack attack)
         {
             Navigator = navigator;
             Memory = memory;
@@ -42,6 +46,7 @@ namespace ArkSurvival.AI.Creatures
             Hearing = hearing;
             Config = config;
             Home = home;
+            Attack = attack;
             PatrolPoints = new CreaturePatrolPointSelector(this);
         }
     }

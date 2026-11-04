@@ -5,7 +5,7 @@ using UnityEngine;
 namespace ArkSurvival.AI.Creatures
 {
     /// <summary>
-    /// Набор состояний поведения существа: Idle, Patrol, Investigate, Search, Chase и Return.
+    /// Набор состояний поведения существа: Idle, Patrol, Investigate, Search, Chase, Attack и Return.
     /// Переходы по восприятию собраны в одном месте (<see cref="ApplyPerception"/>), а не размазаны по состояниям.
     /// Idle без цели ведёт в <see cref="Patrol"/>: существо ходит вокруг текущей домашней точки.
     /// Осмотр (Investigate) завершается прибытием или таймером и сообщает об этом через
@@ -30,10 +30,14 @@ namespace ArkSurvival.AI.Creatures
         public InvestigateState Investigate { get; }
         public SearchState Search { get; }
         public ChaseState Chase { get; }
+        public AttackState Attack { get; }
         public ReturnState Return { get; }
 
         public CreatureState Current => _current;
         public string CurrentName => _current != null ? _current.GetType().Name : string.Empty;
+
+        /// <summary>Идёт ли замах прямо сейчас (DINO-027) — переходы восприятия и шума его не прерывают.</summary>
+        public bool IsAttacking => Context.Attack != null && Context.Attack.IsAttacking;
 
         public CreatureStateMachine(CreatureContext context)
         {
@@ -43,6 +47,7 @@ namespace ArkSurvival.AI.Creatures
             Investigate = new InvestigateState(this);
             Search = new SearchState(this);
             Chase = new ChaseState(this);
+            Attack = new AttackState(this);
             Return = new ReturnState(this, context.Navigator.Agent);
         }
 
@@ -66,11 +71,59 @@ namespace ArkSurvival.AI.Creatures
             bool seesTarget = Context.Perception.TargetVisible;
             bool remembersTarget = Context.Memory.HasTarget;
 
+            // Смерть цели (DINO-028) важнее правила «начатый замах не отменяется»: мёртвого
+            // противника не догоняют и не обыскивают. Память сбрасывается один раз, активное
+            // преследование/атака уходят в Patrol.
+            if (Context.Perception.TargetIsDead)
+            {
+                if (Context.Memory.HasTarget)
+                {
+                    Context.Memory.Clear();
+                    Debug.Log(
+                        "CreatureStateMachine: цель мертва — память о ней сброшена.",
+                        Context.Navigator.Agent);
+                }
+
+                _wasPursuing = false;
+                _investigationSpent = true;
+
+                if (_current == Chase || _current == Investigate || _current == Search || _current == Attack)
+                {
+                    ChangeState(Patrol);
+                }
+
+                return;
+            }
+
+            // Начатый замах не отменяется сменой поведения (DINO-027): пока CreatureAttack
+            // доигрывает замах, восприятие не переключает состояние. После замаха
+            // AttackState сам возвращает управление в Chase.
+            if (IsAttacking)
+            {
+                return;
+            }
+
             if (seesTarget)
             {
                 // Новое наблюдение сбрасывает отметку «осмотр уже выполнен»: следующая потеря цели
                 // снова даёт право на осмотр новой точки.
                 _investigationSpent = false;
+
+                // Цель в дистанции и секторе, пауза прошла — вместо погони начинаем замах.
+                if (Context.Attack != null && Context.Attack.CanStartAttack(Context.Perception.Target))
+                {
+                    bool wasPursuingBeforeAttack = _wasPursuing;
+                    _wasPursuing = true;
+                    if (!wasPursuingBeforeAttack)
+                    {
+                        Debug.Log(
+                            $"CreatureStateMachine: цель в поле зрения («{Context.Perception.Target?.name}») — Attack.",
+                            Context.Navigator.Agent);
+                    }
+
+                    ChangeState(Attack);
+                    return;
+                }
 
                 bool wasPursuing = _wasPursuing;
                 _wasPursuing = true;
@@ -105,7 +158,9 @@ namespace ArkSurvival.AI.Creatures
                 // Осмотр этой точки уже закончен (прибытие/таймер), память ещё жива:
                 // повторно не идём, иначе прибытие каждый кадр запускало бы Investigate заново.
                 // Поиск вокруг точки (Search) при этом продолжается — его не прерываем.
-                if (_current == Investigate || _current == Chase)
+                // Attack сюда попадает уже без активного замаха (иначе вышел бы ранний выход):
+                // продолжать нечего — уходим из атаки, а не зависаем в ней.
+                if (_current == Investigate || _current == Chase || _current == Attack)
                 {
                     _wasPursuing = false;
                     ChangeState(Idle);
@@ -136,8 +191,10 @@ namespace ArkSurvival.AI.Creatures
                 return;
             }
 
-            if (_current == Chase)
+            if (_current == Chase || _current == Attack)
             {
+                // Attack без активного замаха: замах уже доигран, а цель забыта (ранний выход
+                // по IsAttacking выше не сработал) — дальше только Idle/Patrol.
                 ChangeState(Idle);
             }
         }
@@ -162,6 +219,15 @@ namespace ArkSurvival.AI.Creatures
             {
                 Debug.Log(
                     $"CreatureStateMachine: услышан шум в {noise.Position}, но цель видна — шум не меняет поведение.",
+                    Context.Navigator.Agent);
+                return;
+            }
+
+            // Начатый замах не отменяется (DINO-027).
+            if (IsAttacking)
+            {
+                Debug.Log(
+                    $"CreatureStateMachine: услышан шум в {noise.Position}, но идёт замах — поведение не меняется.",
                     Context.Navigator.Agent);
                 return;
             }
@@ -252,7 +318,7 @@ namespace ArkSurvival.AI.Creatures
         /// </summary>
         public void RequestInvestigate()
         {
-            if (_current == Investigate || _current == Return)
+            if (_current == Investigate || _current == Return || IsAttacking)
             {
                 return;
             }
@@ -290,10 +356,27 @@ namespace ArkSurvival.AI.Creatures
             _wasPursuing = false;
         }
 
+        /// <summary>
+        /// Цель убита ударом существа (DINO-028): память о ней больше не нужна, поведение — Patrol.
+        /// Замах и пауза отменяются, чтобы существо не «добивало» мёртвую цель.
+        /// </summary>
+        public void NotifyTargetKilled()
+        {
+            if (Context.Memory != null)
+            {
+                Context.Memory.Clear();
+            }
+
+            Context.Attack?.Cancel();
+            _wasPursuing = false;
+            _investigationSpent = true;
+            ChangeState(Patrol);
+        }
+
         /// <summary>Команда вернуться к исходной точке. Повторный вызов во время возврата ничего не меняет.</summary>
         public void RequestReturn()
         {
-            if (_current == Return)
+            if (_current == Return || IsAttacking)
             {
                 return;
             }

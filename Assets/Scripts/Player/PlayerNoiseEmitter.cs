@@ -47,6 +47,14 @@ namespace ArkSurvival.Player
                 return;
             }
 
+            // Мёртвый игрок не шумит (DINO-028): иначе «замороженное» состояние Sprint
+            // продолжало бы издавать шаги и уводило существо в Investigate.
+            if (_player.IsDead)
+            {
+                _sprintStepTimer = 0f;
+                return;
+            }
+
             float deltaTime = Time.deltaTime;
             UpdateLanding();
             UpdateSprint(deltaTime);

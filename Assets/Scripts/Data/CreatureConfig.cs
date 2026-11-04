@@ -43,10 +43,17 @@ namespace ArkSurvival.Data
         [SerializeField] private float _patrolWaitMax = 3f;
 
         [Header("Attack")]
+        [Tooltip("Дистанция ближней атаки, м (временное).")]
         [SerializeField] private float _attackRange = 2.5f;
+        [Tooltip("Полный угол сектора атаки, градусы; 90° = ±45° от направления вперёд (временное).")]
         [SerializeField] private float _attackAngle = 90f;
-        [SerializeField] private float _attackCooldown = 1.5f;
+        [Tooltip("Пауза после конца замаха до следующей атаки, с (временное).")]
+        [SerializeField] private float _attackCooldown = 1f;
+        [Tooltip("Длительность замаха от начала атаки до удара, с (временное).")]
         [SerializeField] private float _attackWindup = 0.4f;
+        [Tooltip("Момент проверки попадания внутри замаха, с от его начала; обрезается длительностью замаха (временное).")]
+        [SerializeField] private float _attackHitTime = 0.25f;
+        [Tooltip("Урон не используется: атака первой версии смертельна через IKillable (DINO-028).")]
         [SerializeField] private float _attackDamage = 10f;
 
         public float MoveSpeed => _moveSpeed;
@@ -74,6 +81,7 @@ namespace ArkSurvival.Data
         public float AttackAngle => _attackAngle;
         public float AttackCooldown => _attackCooldown;
         public float AttackWindup => _attackWindup;
+        public float AttackHitTime => _attackHitTime;
         public float AttackDamage => _attackDamage;
     }
 }
