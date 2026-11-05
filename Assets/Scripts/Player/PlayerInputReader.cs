@@ -17,6 +17,7 @@ namespace ArkSurvival.Player
         [SerializeField] private InputActionReference _jumpAction;
         [SerializeField] private InputActionReference _rollAction;
         [SerializeField] private InputActionReference _crouchAction;
+        [SerializeField] private InputActionReference _chopAction;
 
         private LookDevice _lookDevice = LookDevice.Mouse;
 
@@ -39,6 +40,7 @@ namespace ArkSurvival.Player
         public bool RollPressed => WasPressedThisFrame(_rollAction);
         public bool CrouchPressed => WasPressedThisFrame(_crouchAction);
         public bool CrouchHeld => IsPressed(_crouchAction);
+        public bool ChopPressed => WasPressedThisFrame(_chopAction);
 
         private void Awake()
         {
@@ -48,6 +50,7 @@ namespace ArkSurvival.Player
             Enable(_jumpAction);
             Enable(_rollAction);
             Enable(_crouchAction);
+            Enable(_chopAction);
         }
 
         private void OnDestroy()
@@ -58,6 +61,7 @@ namespace ArkSurvival.Player
             Disable(_jumpAction);
             Disable(_rollAction);
             Disable(_crouchAction);
+            Disable(_chopAction);
         }
 
         private void UpdateLookDevice()

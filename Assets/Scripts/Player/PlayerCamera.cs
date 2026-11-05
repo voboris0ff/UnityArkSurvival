@@ -146,9 +146,23 @@ namespace ArkSurvival.Player
                 targetPosition.x,
                 FollowPivotHeight(targetPosition.y + lookHeight),
                 targetPosition.z);
-            pivot += Quaternion.Euler(0f, _smoothedYaw, 0f) * Vector3.right * _config.ShoulderOffset;
+            Vector3 desiredPivot = pivot
+                + Quaternion.Euler(0f, _smoothedYaw, 0f) * Vector3.right * _config.ShoulderOffset;
+            float nearClipPlane = _camera != null ? _camera.nearClipPlane : 0.3f;
+            pivot = _collision.ResolvePivot(
+                pivot,
+                desiredPivot,
+                _config,
+                _target,
+                nearClipPlane);
             Vector3 position = pivot - orbitRotation * Vector3.forward * _config.Distance;
-            position = _collision.Resolve(pivot, position, _config, _target, Time.deltaTime);
+            position = _collision.Resolve(
+                pivot,
+                position,
+                _config,
+                _target,
+                nearClipPlane,
+                Time.deltaTime);
 
             Vector3 lookDirection = pivot - position;
             if (lookDirection.sqrMagnitude > 0.0001f)

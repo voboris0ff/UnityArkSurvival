@@ -12,12 +12,15 @@ namespace ArkSurvival.Player
         private static readonly int CrouchAmountHash = Animator.StringToHash("CrouchAmount");
         private static readonly int RollHash = Animator.StringToHash("Roll");
         private static readonly int DeadHash = Animator.StringToHash("Dead");
+        private static readonly int ChopHash = Animator.StringToHash("Chop");
 
         [SerializeField] private Animator _animator;
 
         private bool _wasRolling;
         private bool _hasDeadParameter;
         private bool _deadWarningLogged;
+        private bool _hasChopParameter;
+        private bool _chopWarningLogged;
 
         private void Awake()
         {
@@ -33,6 +36,7 @@ namespace ArkSurvival.Player
 
             _animator.applyRootMotion = false;
             _hasDeadParameter = HasParameter(DeadHash);
+            _hasChopParameter = HasParameter(ChopHash);
         }
 
         public void Tick(PlayerContext context, PlayerStateMachine machine)
@@ -87,6 +91,34 @@ namespace ArkSurvival.Player
             }
 
             _animator.SetBool(DeadHash, dead);
+        }
+
+        /// <summary>
+        /// Запускает замах (DINO-038). Триггер <c>Chop</c> необязателен: если параметра нет
+        /// в контроллере, замах всё равно начинается, а предупреждение пишется один раз.
+        /// </summary>
+        public void TriggerChop()
+        {
+            if (_animator == null)
+            {
+                return;
+            }
+
+            if (!_hasChopParameter)
+            {
+                if (!_chopWarningLogged)
+                {
+                    _chopWarningLogged = true;
+                    Debug.LogWarning(
+                        "PlayerAnimator: в Player.controller нет параметра Chop — замах без анимации. " +
+                        "Добавьте trigger-параметр Chop (см. manual-queue.md).",
+                        this);
+                }
+
+                return;
+            }
+
+            _animator.SetTrigger(ChopHash);
         }
 
         private bool HasParameter(int parameterHash)

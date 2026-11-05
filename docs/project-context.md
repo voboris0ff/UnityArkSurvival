@@ -19,7 +19,9 @@ Names outside code only.
 | Creature Animator | `Attack` trigger | sent once at windup start |
 | Creature Animator | Event `OnAttackHit` | no arguments; `CreatureAttackAnimationEvent` on the Animator object |
 | Player Animator | `Speed`, `Grounded`, `VerticalSpeed`, `Sprinting`, `Crouching`, `CrouchAmount`, `Roll`, `Dead` | `PlayerAnimator` writes them |
-| Layers | `3 Creature`, `6 Player`, `7 Obstacle` | `ProjectSettings/TagManager.asset` |
+| Player Animator | `Chop` trigger | sent once at swing start |
+| Player Animator | Event `OnChopHit` | no arguments; `PlayerChopAnimationEvent` on the Animator object |
+| Layers | `3 Creature`, `6 Player`, `7 Obstacle`, `8 Log`, `Tree` | `ProjectSettings/TagManager.asset` |
 | Vision | `Player` layer | default target if `_target` is empty |
 | Vision | `Eye Point` | optional child; empty → point at `CreatureConfig.EyeHeight` |
 | Vision | `SightAngle` | full angle in degrees, half to each side |
@@ -33,6 +35,8 @@ Names outside code only.
 | Attack | `AttackRange`, `AttackAngle`, `AttackWindup`, `AttackHitTime`, `AttackCooldown` | `CreatureConfig`; `AttackAngle` is a full sector |
 | Player noise | `_sprintLoudness`, `_sprintStepInterval`, `_landingLoudness`, `_landingMinFallSpeed` | `PlayerNoiseEmitter` fields |
 | Player | i-frames | `IFramesStart`, `IFramesEnd` in `PlayerMovementConfig`; used by `RollState` |
+| Player Input | `Chop` action | `Player.inputactions`; `PlayerInputReader._chopAction`, read as `ChopPressed` once per press |
+| Chop | `ChopSwingDuration`, `ChopHitTime` | `ChopConfig`; swing length and the single hit moment inside it (temporary values) |
 
 ## Frame Order (CreatureController.Update)
 

@@ -51,3 +51,18 @@ Completed tasks (status [x]). History is available in `docs/session-logs/`.
 
 - [x] **DINO-030** List of mandatory components and references for the creature prefab (the prefab is not edited by code).
 - [x] **DINO-031** Static review of edge cases: empty references, invalid agent, no path, destroyed/dead target, unreachable points, home outside the NavMesh. Do not run builds or tests.
+- [x] **DINO-032** Fix the bug where the character’s camera sees through the wall if the player gets too close to the wall.
+
+## Stage G. Trees and log chopping
+
+- [x] **DINO-033** `TreeConfig` (ScriptableObject class; the `.asset` is created by the user): `MaxHealth`, `LogsCount`, `LogSpawnImpulse`, `LogSpawnRadius`. No logic.
+- [x] **DINO-034** `ChoppableTree`: `Health` from `TreeConfig`, `TakeChopDamage(float amount, Vector3 source)`, `OnDamaged` and `OnFelled` events; the tree is felled once (protection from repeated `OnFelled`, damage after felling is ignored). No spawn and no player interaction.
+- [x] **DINO-035** `ChopConfig` (or the `Chop*` parameters in the player config): `ChopDamage`, `ChopRange`, `ChopAngle`, `ChopCooldown`, `TreeLayerMask`. Only the data class and validation of values (`<= 0` → safe defaults).
+- [x] **DINO-036** `PlayerChopInteractor`: find the nearest `ChoppableTree` in front of the player (overlap by `TreeLayerMask`, `ChopRange`, `ChopAngle`), skip destroyed/felled trees. No input, no damage.
+- [x] **DINO-037** `PlayerChopInteractor`: chop on input, `ChopCooldown`, a swing is not started without a target, not while the player is dead (`IsDead`). A started swing is not cancelled. The damage is a stub (`ApplyChopHit()` is called by timer `HitTime`), exactly one hit per swing.
+- [x] **DINO-038** Chop animation: `Chop` trigger at swing start (`PlayerAnimator` or equivalent), `OnChopHit` Animation Event (`PlayerChopAnimationEvent` → `PlayerChopInteractor.NotifyAnimationHit`); the timer from DINO-040 stays as a fallback when there is no event. Manual clip setup — `manual-queue.md`.
+- [x] **DINO-039** `LogItem`: component with `Rigidbody` and collider requirements (`RequireComponent`), flags `IsCarried`, `IsRegistered` (for the storage, set later), safe `Destroy`. The log prefab is assembled by the user — list of components and the `LogLayer` in `manual-queue.md`.
+- [x] **DINO-040** `TreeLogSpawner`: subscribe to `OnFelled`, spawn `LogsCount` `LogItem`s around the tree (`LogSpawnRadius`, impulse `LogSpawnImpulse`), check the free space, a missing log prefab → a warning and no exception.
+- [x] **DINO-041** Remove the felled tree: disable the collider and renderer, destroy the object after the spawn (stump is optional, prefab reference may be empty); the order guarantees that `TreeLogSpawner` finishes first.
+- [x] **DINO-042** Tree prefab setup list for the user: `ChoppableTree`, `TreeConfig`, `TreeLogSpawner`, collider, `TreeLayer` (the prefab is not edited by code) — `manual-queue.md`.
+- [x] **DINO-043** Исправить баг, описанный пользователем в manual-queue.md

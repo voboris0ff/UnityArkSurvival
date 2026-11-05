@@ -6,9 +6,9 @@ Project status. Details — `docs/session-logs/`, plan — `docs/roadmap.md`, ma
 
 Unity 6 / URP; the first creature is ready and is being assembled in the Editor.
 
-**Done / Выполнено:** DINO-001…031 + DINO-035 (navigation, vision, memory, hearing, patrol, search, chase, attack, player death, turn control, prefab component list, edge-case review).
+**Done / Выполнено:** DINO-001…043 (navigation, vision, memory, hearing, patrol, search, chase, attack, player death, turn control, prefab component list, camera near-wall fix, edge-case review, `TreeConfig`, `ChoppableTree`, `ChopConfig`, `PlayerChopInteractor` target search and swing, chop animation trigger and `OnChopHit` event, `LogItem`, `TreeLogSpawner`, `FelledTreeRemover`, tree prefab setup list, log spawn height setting).
 
-**Next task / Следующая задача:** DINO-032 (manual Editor setup procedure).
+**Next task / Следующая задача:** следующий открытый пункт `docs/roadmap.md`.
 
 ## Systems
 
