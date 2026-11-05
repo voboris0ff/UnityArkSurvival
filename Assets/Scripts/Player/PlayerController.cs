@@ -13,6 +13,7 @@ namespace ArkSurvival.Player
         [SerializeField] private PlayerCrouchConfig _crouchConfig;
         [SerializeField] private PlayerCamera _camera;
         [SerializeField] private PlayerAnimator _animator;
+        [SerializeField] private PlayerLogCarrier _carrier;
         [SerializeField] private bool _lockCursor = true;
         [SerializeField] private float _logInterval = 0.5f;
 
@@ -74,6 +75,11 @@ namespace ArkSurvival.Player
                 _animator = GetComponent<PlayerAnimator>();
             }
 
+            if (_carrier == null)
+            {
+                _carrier = GetComponent<PlayerLogCarrier>();
+            }
+
             if (_lockCursor)
             {
                 ApplyCursorLock();
@@ -97,9 +103,48 @@ namespace ArkSurvival.Player
                 Debug.LogWarning("PlayerController: PlayerCrouchConfig не назначен — присед будет работать в режиме Toggle с настройками по умолчанию.", this);
             }
 
-            _context = new PlayerContext(_input, _motor, _motor.Config, _staminaConfig, _crouchConfig, _camera, transform);
+            _context = new PlayerContext(_input, _motor, _motor.Config, _staminaConfig, _crouchConfig, _camera, _carrier, transform);
             _stateMachine = new PlayerStateMachine(_context);
+
+            if (_carrier != null)
+            {
+                _carrier.OnCarryStateChanged += HandleCarryStateChanged;
+            }
+
+            if (_animator != null)
+            {
+                _animator.SetCarrying(_carrier != null && _carrier.IsCarrying);
+            }
+
             _stateMachine.Start();
+        }
+
+        private void OnDestroy()
+        {
+            if (_carrier != null)
+            {
+                _carrier.OnCarryStateChanged -= HandleCarryStateChanged;
+            }
+        }
+
+        /// <summary>
+        /// Взял поленья во время спринта (DINO-056): скорость сразу падает до шага,
+        /// а не затухает через обычное торможение. Кувырок и прыжок не затрагиваются.
+        /// Здесь же публикуется <c>IsCarrying</c> для аниматора (DINO-058).
+        /// </summary>
+        private void HandleCarryStateChanged(bool isCarrying)
+        {
+            if (_animator != null)
+            {
+                _animator.SetCarrying(isCarrying);
+            }
+
+            if (!isCarrying || _motor == null || _motor.Config == null)
+            {
+                return;
+            }
+
+            _motor.ClampSpeed(_motor.Config.WalkSpeed);
         }
 
         private void Update()

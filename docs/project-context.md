@@ -19,7 +19,11 @@ Names outside code only.
 | Creature Animator | `Attack` trigger | sent once at windup start |
 | Creature Animator | Event `OnAttackHit` | no arguments; `CreatureAttackAnimationEvent` on the Animator object |
 | Player Animator | `Speed`, `Grounded`, `VerticalSpeed`, `Sprinting`, `Crouching`, `CrouchAmount`, `Roll`, `Dead` | `PlayerAnimator` writes them |
+| Player Animator | `IsCarrying` | `bool`, `PlayerAnimator.SetCarrying`; logged once if the parameter is missing |
 | Player Animator | `Chop` trigger | sent once at swing start |
+| Player Animator | layer `Carry Upper Body`, mask `CarryUpperBody.mask` | upper-body override layer (arms/shoulder), full weight |
+| Player Animator | states `Empty`, `Carry Locomotion`; clips `Carry Idle`, `Carry Walk` | `Carry Locomotion` is a 1D Blend Tree by `Speed`; transitions by `IsCarrying`, ~0.2 s |
+| Player | `CarryAnchor` | child object of the character at hand level; parent of the carried-log visuals, assigned to `CarriedLogsVisual._anchor` |
 | Player Animator | Event `OnChopHit` | no arguments; `PlayerChopAnimationEvent` on the Animator object |
 | Layers | `3 Creature`, `6 Player`, `7 Obstacle`, `8 Log`, `Tree` | `ProjectSettings/TagManager.asset` |
 | Vision | `Player` layer | default target if `_target` is empty |
@@ -36,7 +40,14 @@ Names outside code only.
 | Player noise | `_sprintLoudness`, `_sprintStepInterval`, `_landingLoudness`, `_landingMinFallSpeed` | `PlayerNoiseEmitter` fields |
 | Player | i-frames | `IFramesStart`, `IFramesEnd` in `PlayerMovementConfig`; used by `RollState` |
 | Player Input | `Chop` action | `Player.inputactions`; `PlayerInputReader._chopAction`, read as `ChopPressed` once per press |
+| Player Input | `Pickup` action | `Player.inputactions`; `PlayerInputReader._pickupAction`, read as `PickupPressed` once per press |
+| Player Input | `Drop` action | `Player.inputactions`; `PlayerInputReader._dropAction`, read as `DropPressed` once per press |
 | Chop | `ChopSwingDuration`, `ChopHitTime` | `ChopConfig`; swing length and the single hit moment inside it (temporary values) |
+| Pickup | `PickupRange`, `LogLayerMask`, `PickupLockAfterDrop` | `LogPickupConfig`; search radius, log layers and the after-forced-drop pickup lock for `PlayerLogPickup`; menu `ArkSurvival/Log Pickup Config` |
+| Drop point | `_forwardDistance`, `_fallbackDistances`, `_probeHeight`, `_probeDepth`, `_clearanceRadius`, `_groundLayerMask`, `_blockingLayers` | `LogDropPointFinder` fields; `_blockingLayers` defaults to `Player` and `Obstacle` |
+| Drop | `PlayerLogDrop._pointFinder`, `PlayerLogDrop._logPrefab`, `_handHeight`, `_sideOffset`, `_forwardOffset`, `_forwardImpulse`, `_upwardImpulseShare` | inspector links on the player; ground point is only a landing check, the log spawns beside the hands with a forward impulse, and `RemoveLog()` runs only after a point is found |
+| Carried logs | `_anchor`, `_visualPrefab`, `_firstOffset`, `_stackStep`, `_localEulerAngles` | `CarriedLogsVisual` fields; slots are `MaxCarriedLogs` children of the anchor, shown by `OnCountChanged` |
+| Carried logs | `_visuals`, `_logPrefab`, `_dropImpulse`, `_dropUpwardShare` | `PlayerLogCarrier` fields for `DropAll(DropReason)`; each log spawns at its `CarriedLogsVisual` slot with a small impulse in a random direction, the counter is reset, a missing prefab or visuals keeps the counter untouched; `Roll`/`Jump` additionally raise `OnForcedDrop(int)` (after `OnCountChanged`), `Manual` never does |
 
 ## Frame Order (CreatureController.Update)
 
@@ -94,6 +105,19 @@ public interface IKillable
 - Creature side: the hit consumer calls `TryKill(transform.position)` once; `true` → memory cleared, attack cancelled, → `Patrol`; `false` → log only.
 - A destroyed target (object or `IKillable` component) counts as dead; an unassigned target is not dead.
 - Perception never sees a dead target; `PlayerNoiseEmitter` is silent while dead. No health system: an accepted hit kills; post-death flow undefined.
+
+## Player State Integration Points (DINO-054)
+
+Read-only map for the carry tasks; no code changes.
+
+- Sprint input: `PlayerInputReader.SprintHeld` = `_sprintAction.IsPressed()`; movement reads `PlayerContext.SprintHeld`, which is `false` while `IsCarrying` (DINO-056).
+- Sprint entry: `WalkState.Tick` and `PlayerState.ResolveGroundedState` (move input + `SprintHeld` + `Stamina.CanStartSprint`, not crouched) → `Sprint`.
+- Sprint exit: `SprintState.Tick` → `Walk` on no move, crouch, released input or `!Stamina.CanContinueSprint`; sprint speed comes only from `Move(Config.SprintSpeed)` in that state.
+- Roll start: `PlayerState.TryStartRoll()` — the only entry, used by `Idle`/`Walk`/`Sprint` — checks `RollPressed`, `CanRoll`, grounded, `Stamina.CanSpendRoll`, `Crouch.TryStand()`, then `ChangeState(Machine.Roll)`. i-frames: `RollState.UpdateInvulnerability` at `IFramesStart`, cleared in `RollState.Exit`.
+- Jump start: `PlayerState.TryLeaveGround()` (jump input or buffer + `Motor.CanJump` + `Crouch.TryStand()`) and `FallState.Tick` for the air jump; takeoff is `JumpState.Enter`, which calls `Motor.TryJump()`. Landing is the transition to `Fall` and then `ResolveGroundedState`.
+- `PlayerAnimator.Tick`: `Sprinting` = `Current == Sprint && !Crouch.IsCrouched`; `Roll` trigger on the first frame of `Roll`.
+- `PlayerNoiseEmitter`: a step noise each `_sprintStepInterval` while `Current == Sprint`; a landing noise on ground contact after a fast fall.
+- Speed changes are gradual: `CharacterMotor.Move` moves `_currentSpeed` by `Acceleration`/`Deceleration`, so leaving `Sprint` does not drop the speed instantly. The one exception: `CharacterMotor.ClampSpeed(WalkSpeed)` from `PlayerController` on `OnCarryStateChanged(true)` (DINO-056).
 
 ## Hearing Pipeline
 

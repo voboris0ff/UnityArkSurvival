@@ -66,3 +66,29 @@ Completed tasks (status [x]). History is available in `docs/session-logs/`.
 - [x] **DINO-041** Remove the felled tree: disable the collider and renderer, destroy the object after the spawn (stump is optional, prefab reference may be empty); the order guarantees that `TreeLogSpawner` finishes first.
 - [x] **DINO-042** Tree prefab setup list for the user: `ChoppableTree`, `TreeConfig`, `TreeLogSpawner`, collider, `TreeLayer` (the prefab is not edited by code) — `manual-queue.md`.
 - [x] **DINO-043** Исправить баг, описанный пользователем в manual-queue.md
+
+## Stage H. Carrying logs
+
+- [x] **DINO-044** `PlayerLogCarrier`: carried logs counter, `AddLog()`/`RemoveLog()` API returning `bool`, `OnCountChanged` event. No limit, no input, no visuals.
+- [x] **DINO-045** `MaxCarriedLogs` in the config, `CanPickUp` (limit check), `AddLog` is refused at the limit, `RemoveLog` never goes below zero; the carrier is never left in an inconsistent state.
+- [x] **DINO-046** `PlayerLogPickup`: find the nearest `LogItem` in `PickupRange` (overlap by `LogLayerMask`), skip logs that are carried, registered in the storage reserve or already destroyed. No input and no removal yet.
+- [x] **DINO-047** Pick up a log by input: check `CanPickUp`, `AddLog()` first, then remove the world `LogItem`; if `AddLog()` fails — the world object stays untouched.
+- [x] **DINO-048** `LogDropPointFinder`: a point in front of the player for a dropped log (raycast down to the ground, `OverlapSphere` free-space check, a few fallback offsets); returns `false` if there is no free place.
+- [x] **DINO-049** Drop/put down a log by input: only after `LogDropPointFinder` found a point, spawn `LogItem` (prefab reference), then `RemoveLog()`; no point or no prefab — nothing changes.
+- [x] **DINO-050** `CarriedLogsVisual`: N visual logs by `OnCountChanged` (pool or fixed slots up to `MaxCarriedLogs`), offsets for stacking, no colliders and no Rigidbody on the visuals.
+- [x] **DINO-051** `CarryAnchor` on the character and the visual log prefab: the user sets up the anchor and the prefab, the list of components and offsets — `manual-queue.md`; a missing anchor → a warning and no visuals, no exception.
+- [x] **DINO-052** сейчас полено появляется в земле и иногда проваливается; нужно, чтобы оно появлялось сбоку на уровне рук и получало импульс вперёд
+- [x] **DINO-053** Static review of stages G and H: destroyed tree/log during chopping or pickup, empty references, a log picked up twice in one frame, a dead player, drop with no free space. Do not run builds or tests.
+
+## Stage H2. Carrying logs: shoulder pose, sprint ban, dropping logs
+
+- [x] **DINO-054** Studied `PlayerController`: sprint input, roll (start/end, i-frames from DINO-025), jump (takeoff/landing), `PlayerAnimator` parameters, `PlayerNoiseEmitter` triggers. No code changes. The integration points (where the sprint flag is computed, where the roll and jump start) — in `project-context.md`.
+- [x] **DINO-055** `PlayerLogCarrier`: read-only `IsCarrying` (`Count > 0`) and `OnCarryStateChanged(bool)` event, raised only when the state changes (`0 ↔ >0`), not on every count change. No other systems are touched.
+- [x] **DINO-056** Sprint ban: `PlayerController` ignores the sprint input while `IsCarrying`; if the player is sprinting at the moment of pickup, the speed drops to walk at once. The roll and jump are not changed here.
+- [x] **DINO-057** `PlayerNoiseEmitter`: no sprint-step noise while `IsCarrying` (check that DINO-056 already guarantees it, otherwise add a guard); landing noise is kept.
+- [x] **DINO-058** `PlayerAnimator` publishes `IsCarrying` (bool) from `OnCarryStateChanged`; initial value is set on `Awake`; no animator or parameter → a warning and no exception.
+- [x] **DINO-059** Carry animation (manual): the upper-body layer with an `AvatarMask` (arm and shoulder), the pose "logs lie on the shoulder, the hand holds them" for idle/walk, transitions by `IsCarrying`, the layer weight is blended smoothly; manual clip and Animator Controller setup — `manual-queue.md`.
+- [x] **DINO-060** `PlayerLogCarrier.DropAll(DropReason reason)`: spawn all carried `LogItem`s at the positions of the visual slots (`CarriedLogsVisual`) with a small impulse in a random direction, then reset the counter. If the prefab is missing — a warning and the counter stays untouched (no logs lost). `DropReason` enum: `Roll`, `Jump`, `Manual`.
+- [x] **DINO-061** Forced drop on roll: the roll start calls `DropAll(DropReason.Roll)` before the roll movement; the roll is never blocked by the drop result; i-frames from DINO-025 are unchanged.
+- [x] **DINO-062** Forced drop on jump: the jump takeoff calls `DropAll(DropReason.Jump)`; a jump in the air is not repeated; the drop happens once per jump.
+- [x] **DINO-063** Pickup lock after a forced drop: `PlayerLogPickup` ignores the logs for `PickupLockAfterDrop` seconds (config, `<= 0` → default), so that the player does not pick the fallen logs up in the same roll/jump; the manual pickup and `LogDropPointFinder` are not affected.

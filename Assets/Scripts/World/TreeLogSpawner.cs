@@ -82,7 +82,7 @@ namespace ArkSurvival.World
         private void OnTreeFelled(ChoppableTree tree, Vector3 source)
         {
             // Защита от изменений в инспекторе после Awake: без префаба событие не ломает дерево.
-            if (_config == null || _logPrefab == null)
+            if (_config == null || _logPrefab == null || tree == null)
             {
                 return;
             }

@@ -24,7 +24,7 @@ namespace ArkSurvival.Player.States
                 return;
             }
 
-            if (Context.Crouch.IsCrouched || !Context.Input.SprintHeld || !Context.Stamina.CanContinueSprint)
+            if (Context.Crouch.IsCrouched || !Context.SprintHeld || !Context.Stamina.CanContinueSprint)
             {
                 Machine.ChangeState(Machine.Walk);
                 return;

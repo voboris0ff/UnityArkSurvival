@@ -11,6 +11,7 @@ namespace ArkSurvival.Player.States
             if (Context.Motor.TryJump())
             {
                 Context.ConsumeJumpBuffer();
+                Context.Carrier?.DropAll(DropReason.Jump);
             }
         }
 

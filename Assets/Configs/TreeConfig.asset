@@ -12,7 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1b17a1d884b8c694997c887b708bf00d, type: 3}
   m_Name: TreeConfig
   m_EditorClassIdentifier: 
-  _maxHealth: 100
+  _maxHealth: 10
   _logsCount: 3
-  _logSpawnImpulse: 2
-  _logSpawnRadius: 0.5
+  _logSpawnImpulse: 1
+  _logSpawnRadius: 2
+  _logSpawnHeight: 3

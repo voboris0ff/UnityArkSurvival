@@ -36,6 +36,20 @@ namespace ArkSurvival.Player
             }
         }
 
+        /// <summary>
+        /// Мгновенно ограничивает текущую скорость сверху (DINO-056): нужно, чтобы при
+        /// взятии поленьев спринт сразу сбрасывался до шага, а не затухал через торможение.
+        /// </summary>
+        public void ClampSpeed(float maxSpeed)
+        {
+            if (maxSpeed < 0f)
+            {
+                return;
+            }
+
+            _currentSpeed = Mathf.Min(_currentSpeed, maxSpeed);
+        }
+
         private void Awake()
         {
             if (_controller == null)

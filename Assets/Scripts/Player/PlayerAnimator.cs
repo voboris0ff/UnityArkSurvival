@@ -13,6 +13,8 @@ namespace ArkSurvival.Player
         private static readonly int RollHash = Animator.StringToHash("Roll");
         private static readonly int DeadHash = Animator.StringToHash("Dead");
         private static readonly int ChopHash = Animator.StringToHash("Chop");
+        private static readonly int CarryingHash = Animator.StringToHash("IsCarrying");
+        private const string CarryingParameterName = "IsCarrying";
 
         [SerializeField] private Animator _animator;
 
@@ -21,6 +23,9 @@ namespace ArkSurvival.Player
         private bool _deadWarningLogged;
         private bool _hasChopParameter;
         private bool _chopWarningLogged;
+        private bool _hasCarryingParameter;
+        private bool _carryingWarningLogged;
+        private bool _animatorWarningLogged;
 
         private void Awake()
         {
@@ -31,12 +36,15 @@ namespace ArkSurvival.Player
 
             if (_animator == null)
             {
+                LogAnimatorWarning();
                 return;
             }
 
             _animator.applyRootMotion = false;
             _hasDeadParameter = HasParameter(DeadHash);
             _hasChopParameter = HasParameter(ChopHash);
+            _hasCarryingParameter = HasParameter(CarryingHash);
+            SetCarrying(false);
         }
 
         public void Tick(PlayerContext context, PlayerStateMachine machine)
@@ -119,6 +127,49 @@ namespace ArkSurvival.Player
             }
 
             _animator.SetTrigger(ChopHash);
+        }
+
+        /// <summary>
+        /// Публикует состояние переноски поленьев (DINO-058). Параметр <c>IsCarrying</c>
+        /// необязателен: если его нет в контроллере, предупреждение пишется один раз.
+        /// </summary>
+        public void SetCarrying(bool isCarrying)
+        {
+            if (_animator == null)
+            {
+                LogAnimatorWarning();
+                return;
+            }
+
+            if (!_hasCarryingParameter)
+            {
+                if (!_carryingWarningLogged)
+                {
+                    _carryingWarningLogged = true;
+                    Debug.LogWarning(
+                        "PlayerAnimator: в Player.controller нет параметра IsCarrying — переноска без анимации. " +
+                        "Добавьте bool-параметр IsCarrying (см. manual-queue.md).",
+                        this);
+                }
+
+                return;
+            }
+
+            _animator.SetBool(CarryingHash, isCarrying);
+        }
+
+        private void LogAnimatorWarning()
+        {
+            if (_animatorWarningLogged)
+            {
+                return;
+            }
+
+            _animatorWarningLogged = true;
+            Debug.LogWarning(
+                "PlayerAnimator: Animator не найден — анимации отключены, параметр " +
+                CarryingParameterName + " не публикуется.",
+                this);
         }
 
         private bool HasParameter(int parameterHash)

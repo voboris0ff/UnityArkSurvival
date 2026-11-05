@@ -16,6 +16,7 @@ namespace ArkSurvival.Player.States
         {
             _elapsed = 0f;
             _invulnerabilityStarted = false;
+            Context.Carrier?.DropAll(DropReason.Roll);
             _direction = ResolveDirection();
             Context.Motor.FaceDirection(_direction);
             Context.Crouch.BeginRollCapsule();

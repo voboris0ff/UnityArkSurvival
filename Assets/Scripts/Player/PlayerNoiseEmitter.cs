@@ -29,6 +29,7 @@ namespace ArkSurvival.Player
 
         private PlayerController _player;
         private CharacterMotor _motor;
+        private PlayerLogCarrier _carrier;
         private float _sprintStepTimer;
         private bool _wasGrounded;
         private float _lastAirborneFallSpeed;
@@ -37,6 +38,7 @@ namespace ArkSurvival.Player
         {
             _player = GetComponent<PlayerController>();
             _motor = GetComponent<CharacterMotor>();
+            _carrier = GetComponent<PlayerLogCarrier>();
             _wasGrounded = _motor != null && _motor.IsGrounded;
         }
 
@@ -80,7 +82,10 @@ namespace ArkSurvival.Player
         /// <summary>Шаги бега: шум повторяется через интервал, пока игрок в состоянии Sprint.</summary>
         private void UpdateSprint(float deltaTime)
         {
-            if (_player.StateMachine.Current != _player.StateMachine.Sprint)
+            // Переноска поленьев (DINO-057) запрещает спринт (DINO-056 — SprintHeld и ClampSpeed),
+            // но переход из Sprint в Walk идёт следующим тиком: не шумим шагами ещё до него.
+            if (_player.StateMachine.Current != _player.StateMachine.Sprint
+                || (_carrier != null && _carrier.IsCarrying))
             {
                 _sprintStepTimer = 0f;
                 return;

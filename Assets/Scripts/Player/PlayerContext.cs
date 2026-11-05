@@ -11,6 +11,7 @@ namespace ArkSurvival.Player
         public PlayerStamina Stamina { get; }
         public PlayerCrouchController Crouch { get; }
         public PlayerCamera Camera { get; }
+        public PlayerLogCarrier Carrier { get; }
         public Transform PlayerTransform { get; }
 
         public PlayerContext(
@@ -20,6 +21,7 @@ namespace ArkSurvival.Player
             PlayerStaminaConfig staminaConfig,
             PlayerCrouchConfig crouchConfig,
             PlayerCamera camera,
+            PlayerLogCarrier carrier,
             Transform playerTransform)
         {
             Input = input;
@@ -28,8 +30,15 @@ namespace ArkSurvival.Player
             Stamina = new PlayerStamina(staminaConfig);
             Crouch = new PlayerCrouchController(input, crouchConfig, motor.Controller, playerTransform);
             Camera = camera;
+            Carrier = carrier;
             PlayerTransform = playerTransform;
         }
+
+        /// <summary>Переносит ли игрок поленья (DINO-056): спринт при переноске запрещён.</summary>
+        public bool IsCarrying => Carrier != null && Carrier.IsCarrying;
+
+        /// <summary>Действующий ввод спринта: сам ввод не подаётся, пока игрок несёт поленья.</summary>
+        public bool SprintHeld => Input.SprintHeld && !IsCarrying;
 
         public bool IsInvulnerable => InvulnerabilityRemaining > 0f;
         public float InvulnerabilityRemaining { get; private set; }

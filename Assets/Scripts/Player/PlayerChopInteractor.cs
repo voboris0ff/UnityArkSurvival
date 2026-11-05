@@ -69,6 +69,15 @@ namespace ArkSurvival.Player
 
         private void Update()
         {
+            if (_config == null)
+            {
+                // Конфиг мог быть снят в инспекторе после Awake: начатый замах безопасно сбрасываем.
+                IsSwinging = false;
+                _swingTarget = null;
+                CurrentTarget = null;
+                return;
+            }
+
             float deltaTime = Time.deltaTime;
 
             // Начатый замах всегда доигрывается: смерть игрока его не отменяет.

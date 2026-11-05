@@ -24,7 +24,7 @@ namespace ArkSurvival.Player.States
                 return;
             }
 
-            if (!Context.Crouch.IsCrouched && Context.Input.SprintHeld && Context.Stamina.CanStartSprint)
+            if (!Context.Crouch.IsCrouched && Context.SprintHeld && Context.Stamina.CanStartSprint)
             {
                 Machine.ChangeState(Machine.Sprint);
                 return;

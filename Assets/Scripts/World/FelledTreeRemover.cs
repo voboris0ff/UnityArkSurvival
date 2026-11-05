@@ -72,13 +72,16 @@ namespace ArkSurvival.World
                 }
             }
 
-            if (_stumpPrefab != null)
+            if (_stumpPrefab != null && tree != null)
             {
                 Transform treeTransform = tree.transform;
                 Instantiate(_stumpPrefab, treeTransform.position, treeTransform.rotation);
             }
 
-            Destroy(tree.gameObject);
+            if (tree != null)
+            {
+                Destroy(tree.gameObject);
+            }
         }
     }
 }

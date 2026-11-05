@@ -65,7 +65,7 @@ namespace ArkSurvival.Player.States
                 return Machine.Walk;
             }
 
-            return Context.Input.SprintHeld && Context.Stamina.CanStartSprint
+            return Context.SprintHeld && Context.Stamina.CanStartSprint
                 ? Machine.Sprint
                 : Machine.Walk;
         }
@@ -106,7 +106,7 @@ namespace ArkSurvival.Player.States
                 }
                 else
                 {
-                    speed = Context.Input.SprintHeld ? Context.Config.SprintSpeed : Context.Config.WalkSpeed;
+                    speed = Context.SprintHeld ? Context.Config.SprintSpeed : Context.Config.WalkSpeed;
                 }
             }
 
